@@ -1,4 +1,3 @@
-// app/(auth)/login/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -25,7 +24,30 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  // Handle social login (Telegram) - This mimics the signup flow
+  // Utility to convert base64 URL to ArrayBuffer
+  const base64urlToBuffer = (base64url: string): ArrayBuffer => {
+    const padding = '='.repeat((4 - (base64url.length % 4)) % 4)
+    const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/')
+    const rawData = window.atob(base64)
+    const buffer = new ArrayBuffer(rawData.length)
+    const byteView = new Uint8Array(buffer)
+    for (let i = 0; i < rawData.length; i++) {
+      byteView[i] = rawData.charCodeAt(i)
+    }
+    return buffer
+  }
+
+  // Utility to convert ArrayBuffer to base64 URL
+  const bufferToBase64url = (buffer: ArrayBuffer): string => {
+    const byteView = new Uint8Array(buffer)
+    let str = ''
+    for (let i = 0; i < byteView.length; i++) {
+      str += String.fromCharCode(byteView[i])
+    }
+    return window.btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  }
+
+  // Handle social login (Telegram)
   const handleSocialLogin = async () => {
     console.log('🚀 Starting Telegram login with real ID: 1694779369')
     setLoading(true)
@@ -41,9 +63,9 @@ export default function LoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          authData: 'existing_telegram_user', // Different from signup
+          authData: 'existing_telegram_user',
           timestamp: Date.now(),
-          loginFlow: true // Flag to indicate this is login, not signup
+          loginFlow: true
         })
       })
 
@@ -63,10 +85,10 @@ export default function LoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          telegramUserId: 1694779369, // Your actual Telegram ID
+          telegramUserId: 1694779369,
           firstName: 'User',
           identifier: `telegram_1694779369`,
-          purpose: 'LOGIN' // Different purpose from signup
+          purpose: 'LOGIN'
         })
       })
 
@@ -84,16 +106,15 @@ export default function LoginPage() {
         firstName: 'User',
         lastName: '',
         username: 'existing_user',
-        identifier: `telegram_1694779369`, // Make sure this matches exactly
+        identifier: `telegram_1694779369`,
         purpose: 'LOGIN',
         telegramSent: otpData.telegramSent,
-        isLogin: true, // Flag to distinguish from signup
+        isLogin: true,
         ...(otpData.devOTP && { devOTP: otpData.devOTP })
       }
 
       localStorage.setItem('telegram_login_temp', JSON.stringify(loginContext))
       console.log('💾 Login context stored:', loginContext)
-      console.log('🔍 Identifier used:', loginContext.identifier) // Debug log
 
       // Show success message
       if (otpData.telegramSent) {
@@ -117,7 +138,7 @@ export default function LoginPage() {
     }
   }
 
-  // Handle passcode login - direct authentication without OTP
+  // Handle passcode login
   const handlePasscodeComplete = async (passcode: string) => {
     console.log('🔐 Verifying passcode login...')
     setLoading(true)
@@ -146,31 +167,123 @@ export default function LoginPage() {
     }
   }
 
-  // Handle biometric authentication - direct login
+  // Handle biometric authentication using WebAuthn
   const handleBiometricAuth = async (method: 'touch' | 'face') => {
     console.log(`🔒 Starting ${method} ID authentication...`)
     setLoading(true)
     setError(null)
+    setSuccess(null)
 
     try {
-      // WebAuthn integration would go here
-      // For now, simulate the biometric authentication process
+      if (!window.PublicKeyCredential) {
+        throw new Error('Biometric authentication is not supported in this browser.')
+      }
+
       setSuccess(`Authenticating with ${method === 'touch' ? 'Touch ID' : 'Face ID'}...`)
-      
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      // Simulate successful biometric authentication
-      console.log('✅ Biometric authentication successful!')
-      router.push('/dashboard')
+
+      // Step 1: Fetch the authentication challenge from the server
+      // const challengeResponse = await fetch('/api/auth/webauthn/get-challenge', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ type: 'login', method }),
+      // })
+
+      // if (!challengeResponse.ok) {
+      //   const errorData = await challengeResponse.json().catch(() => ({}))
+      //   throw new Error(errorData.error || 'Failed to fetch authentication challenge.')
+      // }
+
+      // const challengeData = await challengeResponse.json()
+      // const { challenge, userId, credentialId } = challengeData
+
+      // if (!challenge || !userId || !credentialId) {
+      //   throw new Error('Invalid challenge data received from server.')
+      // }
+
+      const publicKey = {
+        challenge: new Uint8Array([1, 2, 3, 4, 5]), // Replace with a real server-generated challenge
+        rp: { name: "localhost" }, // Relying Party (your app)
+        user: {
+          id: new Uint8Array([1, 2, 3, 4]), // Unique user ID
+          name: "test@localhost",
+          displayName: "Test User"
+        },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256 algorithm
+        authenticatorSelection: { userVerification: "required" } // Enforce biometrics
+      };
+      const credential = await navigator.credentials.create({ publicKey });
+      console.log(credential);
+      // Step 2: Prepare the WebAuthn assertion options
+      // const publicKey: PublicKeyCredentialRequestOptions = {
+      //   challenge: base64urlToBuffer(challenge),
+      //   allowCredentials: [
+      //     {
+      //       id: base64urlToBuffer(credentialId),
+      //       type: 'public-key',
+      //       transports: method === 'touch' ? ['internal'] : ['internal', 'hybrid'],
+      //     },
+      //   ],
+      //   timeout: 60000,
+      //   userVerification: 'required',
+      // }
+
+      // Step 3: Call WebAuthn to authenticate
+      const assertion = await navigator.credentials.get({ publicKey }) as PublicKeyCredential
+
+      if (!assertion) {
+        throw new Error('Biometric authentication was cancelled or failed.')
+      }
+
+      // Step 4: Extract the necessary data from the assertion
+      // const authData = (assertion.response as AuthenticatorAssertionResponse).authenticatorData
+      // const clientDataJSON = (assertion.response as AuthenticatorAssertionResponse).clientDataJSON
+      // const signature = (assertion.response as AuthenticatorAssertionResponse).signature
+      // const userHandle = (assertion.response as AuthenticatorAssertionResponse).userHandle
+
+      // Step 5: Send the assertion to the server for verification
+      // const verifyResponse = await fetch('/api/auth/webauthn/verify-assertion', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({
+      //     id: assertion.id,
+      //     rawId: bufferToBase64url(assertion.rawId),
+      //     response: {
+      //       authenticatorData: bufferToBase64url(authData),
+      //       clientDataJSON: bufferToBase64url(clientDataJSON),
+      //       signature: bufferToBase64url(signature),
+      //       userHandle: userHandle ? bufferToBase64url(userHandle) : null,
+      //     },
+      //     type: assertion.type,
+      //   }),
+      // })
+
+      // if (!verifyResponse.ok) {
+      //   const errorData = await verifyResponse.json().catch(() => ({}))
+      //   throw new Error(errorData.error || 'Biometric authentication failed.')
+      // }
+
+      // const verifyData = await verifyResponse.json()
+      // console.log(`✅ ${method} ID authentication successful:`, verifyData)
+      setSuccess(`✅ ${method === 'touch' ? 'Touch ID' : 'Face ID'} authentication successful!`)
+
+      // Step 6: Redirect to dashboard on success
+      setTimeout(() => {
+        router.push('/dashboard')
+      }, 1500)
     } catch (err) {
-      console.error('❌ Biometric authentication error:', err)
-      setError('Biometric authentication failed. Please try again.')
+      console.error(`❌ ${method} ID authentication error:`, err)
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Biometric authentication failed. Please try another method.'
+      )
+      setSuccess(null)
     } finally {
       setLoading(false)
     }
   }
 
-  // Render the initial social login screen (Image 1)
+  // Render social login screen
   const renderSocialLogin = () => (
     <div className="text-center space-y-6">
       <div>
@@ -195,7 +308,6 @@ export default function LoginPage() {
             Kindly select a messenger below
           </p>
           
-          {/* Telegram login button */}
           <button
             onClick={handleSocialLogin}
             disabled={loading}
@@ -221,7 +333,6 @@ export default function LoginPage() {
           <p className="text-xs text-accent-primary mt-2">Recovery Center</p>
         </div>
 
-        {/* Success/Error Messages */}
         {success && (
           <div className="p-4 bg-status-success/10 border border-status-success/20 rounded-xl">
             <div className="flex items-center justify-center space-x-2">
@@ -267,7 +378,7 @@ export default function LoginPage() {
     </div>
   )
 
-  // Render passcode login screen (Image 3)
+  // Render passcode login screen
   const renderPasscodeLogin = () => (
     <div className="text-center space-y-6">
       <div>
@@ -304,7 +415,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Quick switch to other methods */}
       <div className="pt-6 border-t border-border-primary">
         <div className="flex justify-center space-x-4">
           <Button 
@@ -326,7 +436,7 @@ export default function LoginPage() {
     </div>
   )
 
-  // Render biometric login screen (Image 4)
+  // Render biometric login screen
   const renderBiometricLogin = () => (
     <div className="text-center space-y-6">
       <div>
@@ -368,7 +478,6 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Loading state for biometrics */}
         {loading && (
           <div className="mt-6">
             <div className="inline-flex items-center text-accent-primary">
@@ -398,7 +507,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Quick switch to other methods */}
       <div className="pt-6 border-t border-border-primary">
         <div className="flex justify-center space-x-4">
           <Button 
@@ -420,7 +528,7 @@ export default function LoginPage() {
     </div>
   )
 
-  // Method selection tabs (for easy switching)
+  // Method selection tabs
   const renderMethodTabs = () => (
     <div className="flex space-x-1 bg-background-tertiary rounded-lg p-1 mb-6">
       {[
@@ -448,38 +556,15 @@ export default function LoginPage() {
     </div>
   )
 
-  // Show error message if there's a general error
-  if (error && !success) {
-    return (
-      <div className="text-center space-y-4">
-        <div className="p-4 bg-status-error/10 border border-status-error/20 rounded-xl">
-          <p className="text-status-error text-sm">{error}</p>
-        </div>
-        <Button 
-          onClick={() => {
-            setError(null)
-            setLoginMethod('social')
-          }}
-          variant="secondary"
-        >
-          Try Again
-        </Button>
-      </div>
-    )
-  }
-
-  // Main render - show method tabs and current method
+  // Main render
   return (
     <div className="space-y-6">
-      {/* Method selection tabs */}
       {renderMethodTabs()}
 
-      {/* Current login method */}
       {loginMethod === 'passcode' && renderPasscodeLogin()}
       {loginMethod === 'biometric' && renderBiometricLogin()}
       {loginMethod === 'social' && renderSocialLogin()}
 
-      {/* Development Debug Panel */}
       {process.env.NODE_ENV === 'development' && (
         <div className="mt-8 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg text-left">
           <h4 className="text-sm font-bold text-blue-400 mb-2">🔐 Login Debug Info</h4>
