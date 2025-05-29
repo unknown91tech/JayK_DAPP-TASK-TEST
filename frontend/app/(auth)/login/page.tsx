@@ -1,8 +1,8 @@
 // app/(auth)/login/page.tsx
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { PasscodeInput } from '@/components/ui/passcode-input'
@@ -22,7 +22,39 @@ export default function LoginPage() {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('social')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const telegramSession = searchParams.get('telegram_session')
 
+  const handleTelegramAuth = async (sessionToken: string) => {
+    try {
+      const response = await fetch('/api/auth/social/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken })
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        if (data.isNewUser) {
+          router.push('/setup-account')
+        } else {
+          router.push('/dashboard')
+        }
+      } else {
+        setError('Telegram authentication failed')
+      }
+    } catch (error) {
+      setError('Authentication failed')
+    }
+  }
+
+  useEffect(() => {
+    if (telegramSession) {
+      // Auto-authenticate with Telegram session
+      handleTelegramAuth(telegramSession)
+    }
+  }, [telegramSession])
   // Handle social login (Telegram in this case)
   const handleSocialLogin = async () => {
     setLoading(true)
