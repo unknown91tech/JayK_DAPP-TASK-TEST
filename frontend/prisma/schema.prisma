@@ -1,0 +1,256 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model - core user information
+model User {
+  id            String    @id @default(cuid())
+  osId          String    @unique @map("os_id") // OneStep ID - universal identifier
+  username      String    @unique
+  email         String?   @unique
+  phoneNumber   String?   @unique @map("phone_number")
+  firstName     String?   @map("first_name")
+  lastName      String?   @map("last_name")
+  dateOfBirth   DateTime? @map("date_of_birth")
+  
+  // Authentication fields
+  passcodeHash  String?   @map("passcode_hash") // Hashed 6-digit passcode
+  isVerified    Boolean   @default(false) @map("is_verified")
+  
+  // KYC/AML fields
+  kycStatus     KycStatus @default(PENDING) @map("kyc_status")
+  kycData       Json?     @map("kyc_data") // Store KYC information as JSON
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+  
+  // Relations
+  socialLogins    SocialLogin[]
+  devices         Device[]
+  biometrics      BiometricCredential[]
+  securityLogs    SecurityLog[]
+  avvLogs         AvvLog[]
+  
+  @@map("users")
+}
+
+// Social login integration (focusing on Telegram)
+model SocialLogin {
+  id           String      @id @default(cuid())
+  userId       String      @map("user_id")
+  provider     SocialProvider
+  providerId   String      @map("provider_id") // Telegram user ID
+  providerData Json?       @map("provider_data") // Additional provider data
+  isActive     Boolean     @default(true) @map("is_active")
+  
+  // Timestamps
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  
+  // Relations
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([provider, providerId])
+  @@map("social_logins")
+}
+
+// Device management (max 5 devices per user)
+model Device {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  deviceName    String      @map("device_name")
+  deviceType    DeviceType  @map("device_type")
+  fingerprint   String      @unique // Device fingerprint for identification
+  userAgent     String?     @map("user_agent")
+  ipAddress     String?     @map("ip_address")
+  isActive      Boolean     @default(true) @map("is_active")
+  isTrusted     Boolean     @default(false) @map("is_trusted")
+  
+  // Timestamps
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  lastUsedAt    DateTime?   @map("last_used_at")
+  
+  // Relations
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("devices")
+}
+
+// Biometric credentials (WebAuthn)
+model BiometricCredential {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  credentialId  String      @unique @map("credential_id") // WebAuthn credential ID
+  publicKey     String      @map("public_key") // WebAuthn public key
+  counter       Int         @default(0) // WebAuthn signature counter
+  deviceType    String?     @map("device_type") // "touch_id", "face_id", etc.
+  isActive      Boolean     @default(true) @map("is_active")
+  
+  // Timestamps
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  lastUsedAt    DateTime?   @map("last_used_at")
+  
+  // Relations
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("biometric_credentials")
+}
+
+// OTP verification tracking
+model OtpVerification {
+  id            String      @id @default(cuid())
+  identifier    String      // Phone number or email
+  code          String      // OTP code (hashed)
+  purpose       OtpPurpose  // LOGIN, SIGNUP, RESET_PASSWORD, etc.
+  isUsed        Boolean     @default(false) @map("is_used")
+  attempts      Int         @default(0)
+  maxAttempts   Int         @default(3) @map("max_attempts")
+  
+  // Expiration
+  expiresAt     DateTime    @map("expires_at")
+  
+  // Timestamps
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  
+  @@map("otp_verifications")
+}
+
+// Security monitoring and logging
+model SecurityLog {
+  id            String        @id @default(cuid())
+  userId        String?       @map("user_id")
+  eventType     SecurityEvent @map("event_type")
+  description   String?
+  metadata      Json?         // Additional event data
+  ipAddress     String?       @map("ip_address")
+  userAgent     String?       @map("user_agent")
+  deviceId      String?       @map("device_id")
+  riskLevel     RiskLevel     @default(LOW) @map("risk_level")
+  
+  // Timestamps
+  createdAt     DateTime      @default(now()) @map("created_at")
+  
+  // Relations
+  user          User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("security_logs")
+}
+
+// Auto-Verification & Validation (AVV) system logs
+model AvvLog {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  checkType     AvvCheckType @map("check_type")
+  input         String?     // The input being validated (hashed if sensitive)
+  result        AvvResult
+  reason        String?     // Reason for failure if applicable
+  metadata      Json?       // Additional validation data
+  
+  // Timestamps
+  createdAt     DateTime    @default(now()) @map("created_at")
+  
+  // Relations
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("avv_logs")
+}
+
+// SSO sessions for external dApps
+model SsoSession {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  osId          String      @map("os_id") // Reference to user's OS-ID
+  dappId        String      @map("dapp_id") // Identifier for the requesting dApp
+  sessionToken  String      @unique @map("session_token")
+  isActive      Boolean     @default(true) @map("is_active")
+  
+  // Expiration
+  expiresAt     DateTime    @map("expires_at")
+  
+  // Timestamps
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  
+  @@map("sso_sessions")
+}
+
+// Enums
+enum SocialProvider {
+  TELEGRAM
+  // Future: TWITTER, DISCORD, etc.
+}
+
+enum DeviceType {
+  MOBILE
+  DESKTOP
+  TABLET
+  UNKNOWN
+}
+
+enum KycStatus {
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum OtpPurpose {
+  LOGIN
+  SIGNUP
+  RESET_PASSWORD
+  VERIFY_PHONE
+  VERIFY_EMAIL
+}
+
+enum SecurityEvent {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  PASSWORD_RESET
+  BIOMETRIC_SETUP
+  BIOMETRIC_AUTH
+  SUSPICIOUS_ACTIVITY
+  DEVICE_REGISTERED
+  DEVICE_REMOVED
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AvvCheckType {
+  PASSCODE_STRENGTH
+  PASSCODE_PERSONAL_DATA
+  BIOMETRIC_QUALITY
+  DEVICE_TRUST
+  BEHAVIORAL_PATTERN
+}
+
+enum AvvResult {
+  PASS
+  FAIL
+  WARNING
+}
