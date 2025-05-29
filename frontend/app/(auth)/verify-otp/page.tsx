@@ -1,4 +1,3 @@
-// app/(auth)/verify-otp/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -10,97 +9,72 @@ export default function VerifyOtpPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [timeLeft, setTimeLeft] = useState(600) // 10 minutes in seconds
-  const [canResend, setCanResend] = useState(false)
-  const [resendLoading, setResendLoading] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(600) // 10 minutes
+  const [userInfo, setUserInfo] = useState<any>(null)
 
-  // Countdown timer for OTP expiration
+  // Get user info from localStorage
+  useEffect(() => {
+    const tempUserData = localStorage.getItem('telegram_user_temp')
+    if (tempUserData) {
+      setUserInfo(JSON.parse(tempUserData))
+    }
+  }, [])
+
+  // Countdown timer
   useEffect(() => {
     if (timeLeft > 0) {
       const timer = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            setCanResend(true)
-            return 0
-          }
-          return prev - 1
-        })
+        setTimeLeft(prev => prev - 1)
       }, 1000)
-      
       return () => clearInterval(timer)
     }
   }, [timeLeft])
 
-  // Format time display (MM:SS)
+  // Format time display
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = seconds % 60
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
   }
 
-  // Handle OTP completion
+  // Handle OTP verification
   const handleOtpComplete = async (otp: string) => {
+    console.log('🔐 Verifying OTP:', otp)
     setLoading(true)
     setError(null)
 
     try {
-      // Verify OTP with backend
       const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           otp,
-          // In a real app, we'd get this from context or URL params
-          identifier: 'user@example.com' // or phone number
+          identifier: userInfo?.identifier || 'telegram_user'
         })
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        // Check if this is signup or login flow
+        console.log('✅ OTP verified successfully!')
+        
+        // Clear temporary data
+        localStorage.removeItem('telegram_user_temp')
+        
+        // Check if new user or existing user
         if (data.isNewUser) {
           router.push('/setup-account')
         } else {
           router.push('/dashboard')
         }
       } else {
-        setError(data.message || 'Invalid OTP. Please try again.')
+        setError(data.error || 'Invalid OTP. Please try again.')
       }
     } catch (err) {
+      console.error('❌ OTP verification error:', err)
       setError('Verification failed. Please try again.')
     } finally {
       setLoading(false)
-    }
-  }
-
-  // Handle resend OTP
-  const handleResendOtp = async () => {
-    setResendLoading(true)
-    setError(null)
-
-    try {
-      const response = await fetch('/api/auth/resend-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          identifier: 'user@example.com' // This should come from context
-        })
-      })
-
-      if (response.ok) {
-        // Reset timer and states
-        setTimeLeft(600)
-        setCanResend(false)
-        // Show success message briefly
-        setError(null)
-      } else {
-        setError('Failed to resend OTP. Please try again.')
-      }
-    } catch (err) {
-      setError('Failed to resend OTP. Please try again.')
-    } finally {
-      setResendLoading(false)
     }
   }
 
@@ -121,9 +95,14 @@ export default function VerifyOtpPage() {
         <p className="text-sm text-foreground-tertiary">
           Enter the OTP verification code sent to you
         </p>
+        {userInfo && (
+          <p className="text-sm text-accent-primary">
+            Check your Telegram chat with @OneStepTest6_BOT
+          </p>
+        )}
       </div>
 
-      {/* Timer display */}
+      {/* Timer */}
       <div className="py-4">
         <div className="text-2xl font-mono font-bold text-accent-primary">
           {formatTime(timeLeft)}
@@ -143,61 +122,34 @@ export default function VerifyOtpPage() {
         />
       </div>
 
-      {/* Proceed button */}
-      <div className="pt-4">
-        <Button 
-          variant="primary" 
-          className="w-full"
-          disabled={loading}
-          loading={loading}
-        >
-          Proceed
-        </Button>
-      </div>
-
-      {/* Resend OTP section */}
-      <div className="pt-6 border-t border-border-primary">
-        <p className="text-sm text-foreground-tertiary mb-3">
-          Didn't receive your OTP?
-        </p>
-        
-        <button
-          onClick={handleResendOtp}
-          disabled={!canResend || resendLoading}
-          className={`text-sm transition-colors inline-flex items-center ${
-            canResend 
-              ? 'text-accent-primary hover:text-accent-hover cursor-pointer' 
-              : 'text-foreground-tertiary cursor-not-allowed'
-          }`}
-        >
-          {resendLoading ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Sending...
-            </>
-          ) : (
-            <>
-              Resend OTP
-              {/* Info icon */}
-              <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Error display */}
+      {/* Error Display */}
       {error && (
-        <div className="p-4 bg-status-error/10 border border-status-error/20 rounded-xl animate-slide-up">
+        <div className="p-4 bg-status-error/10 border border-status-error/20 rounded-xl">
           <p className="text-status-error text-sm">{error}</p>
         </div>
       )}
 
-      {/* Help section */}
+      {/* Proceed Button */}
+      <Button 
+        variant="primary" 
+        className="w-full"
+        disabled={loading}
+        loading={loading}
+      >
+        Proceed
+      </Button>
+
+      {/* Resend Section */}
+      <div className="pt-6 border-t border-border-primary">
+        <p className="text-sm text-foreground-tertiary mb-3">
+          Didn't receive your OTP?
+        </p>
+        <Button variant="ghost" size="sm">
+          Resend OTP
+        </Button>
+      </div>
+
+      {/* Help */}
       <div className="text-center pt-4">
         <p className="text-xs text-foreground-tertiary mb-2">
           Need help with verification?
