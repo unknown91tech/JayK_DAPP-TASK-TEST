@@ -1,4 +1,3 @@
-// app/(auth)/setup-account/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -81,6 +80,8 @@ export default function SetupAccountPage() {
 
       if (response.ok && result.success) {
         console.log('✅ Account setup successful!')
+        // Store username in localStorage
+        localStorage.setItem('username', data.username.trim())
         setSuccess('Account created successfully! Redirecting to passcode setup...')
         
         // Small delay to show success message

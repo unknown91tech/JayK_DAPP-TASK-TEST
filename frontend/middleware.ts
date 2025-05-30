@@ -1,182 +1,226 @@
-// middleware.ts
+// middleware.ts - Enhanced middleware to handle login flows properly
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
-// Routes that don't require authentication
+// Define route patterns that don't require authentication
 const publicRoutes = [
   '/',
   '/login',
   '/signup',
   '/verify-otp',
   '/help',
-  '/terms',
   '/privacy',
-  '/recovery',
-  '/dashboard',
-  '/setup-account',
-  '/setup-password',
-  '/biometrics',
-]
-
-// API routes that don't require authentication
-const publicApiRoutes = [
-  '/api/auth/login',
+  '/terms',
   '/api/auth/signup',
+  '/api/auth/login',
   '/api/auth/verify-otp',
-  '/api/auth/resend-otp',
-  '/api/auth/telegram/send-otp',
   '/api/auth/telegram/oauth',
-  '/api/auth/social/telegram',
+  '/api/auth/telegram/send-otp',
+  '/api/auth/telegram/setup',
+  '/api/auth/telegram/webhook',
+  '/api/auth/resend-otp',
   '/api/auth/webauthn/get-challenge',
   '/api/auth/webauthn/verify-assertion',
-  '/api/auth/setup-account',
-  '/api/security/avv',
-  '/api/auth/passcode/create',
-
-  // SSO validation endpoints (they have their own auth)
-  '/api/sso/validate'
+  '/api/sso/validate',
+  '/api/telegram/setup',
+  '/api/telegram/webhook'
 ]
 
-// Routes that are part of the setup flow (partially authenticated)
+// Routes that allow incomplete setup (for user account creation flow)
 const setupRoutes = [
   '/setup-account',
-  '/setup-passcode',
+  '/setup-passcode', 
   '/biometrics',
-  '/complete-profile'
+  '/complete-profile',
+  '/api/auth/setup-account',
+  '/api/auth/passcode/create',
+  '/api/security/avv'
 ]
+
+// Special login routes that need special handling
+const loginRoutes = [
+  '/api/auth/passcode/verify', // Allow passcode verification during login
+  '/api/auth/session' // Allow session checks but handle incomplete setup gracefully
+]
+
+// Protected dashboard routes that require complete setup
+const protectedRoutes = [
+  '/dashboard',
+  '/api/user/profile',
+  '/api/user/devices',
+  '/api/user/os-id',
+  '/api/kyc/submit',
+  '/api/kyc/status'
+]
+
+// Function to check if a path matches any pattern in an array
+function matchesRoutes(pathname: string, routes: string[]): boolean {
+  return routes.some(route => {
+    // Exact match
+    if (pathname === route) return true
+    
+    // Pattern match for API routes (e.g., /api/auth/* matches /api/auth/anything)
+    if (route.endsWith('/*')) {
+      const baseRoute = route.slice(0, -2)
+      return pathname.startsWith(baseRoute)
+    }
+    
+    return false
+  })
+}
+
+// Function to verify JWT token and extract user info
+async function verifyToken(token: string) {
+  try {
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-key')
+    const { payload } = await jwtVerify(token, secret)
+    
+    return {
+      userId: payload.userId as string,
+      osId: payload.osId as string,
+      username: payload.username as string,
+      isSetupComplete: payload.isSetupComplete as boolean,
+      isVerified: payload.isVerified as boolean
+    }
+  } catch (error) {
+    console.log('❌ Token verification failed:', error)
+    return null
+  }
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
   console.log('🔒 Middleware checking:', pathname)
   
-  // Allow public routes
-  if (publicRoutes.includes(pathname)) {
+  // Allow all public routes without any authentication
+  if (matchesRoutes(pathname, publicRoutes)) {
     console.log('✅ Public route allowed:', pathname)
     return NextResponse.next()
   }
-
-  // Allow public API routes
-  if (publicApiRoutes.some(route => pathname.startsWith(route))) {
-    console.log('✅ Public API route allowed:', pathname)
-    return NextResponse.next()
-  }
   
-  // Allow static files and Next.js internals
-  if (
-    pathname.startsWith('/_next/') ||
-    pathname.startsWith('/favicon.ico') ||
-    pathname.startsWith('/icons/') ||
-    pathname.startsWith('/images/') ||
-    pathname.includes('.') // Allow files with extensions
-  ) {
-    console.log('✅ Static file allowed:', pathname)
-    return NextResponse.next()
-  }
-  
-  console.log('🔍 Checking authentication for:', pathname)
-  
-  // Get the session token from cookies or headers
-  const sessionToken = request.cookies.get('onestep-session')?.value ||
-                      request.headers.get('authorization')?.replace('Bearer ', '')
+  // Get session token from cookies
+  const sessionToken = request.cookies.get('onestep-session')?.value
   
   if (!sessionToken) {
-    console.log('❌ No session token found for:', pathname)
-    // No session token, redirect to login
+    console.log('❌ No session token found for protected route:', pathname)
+    
+    // If accessing an API route without auth, return 401
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
     
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
+    // For page routes, redirect to login
+    return NextResponse.redirect(new URL('/login', request.url))
   }
   
-  console.log('🎟️ Session token found, verifying...')
+  // Verify the session token
+  console.log('🔍 Checking authentication for:', pathname)
+  console.log('🍪 Session token found, verifying...')
   
-  try {
-    // Verify the JWT token
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-key')
-    const { payload } = await jwtVerify(sessionToken, secret)
+  const user = await verifyToken(sessionToken)
+  
+  if (!user) {
+    console.log('❌ Invalid session token')
     
-    const user = payload as {
-      userId: string
-      osId: string
-      username?: string
-      isSetupComplete?: boolean
-      isVerified?: boolean
+    // Clear the invalid cookie
+    const response = pathname.startsWith('/api/') 
+      ? NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+      : NextResponse.redirect(new URL('/login', request.url))
+    
+    response.cookies.set('onestep-session', '', { maxAge: 0 })
+    return response
+  }
+  
+  console.log('✅ Token verified for user:', user.osId)
+  console.log('🏁 Setup complete:', user.isSetupComplete)
+  
+  // Special handling for login routes (passcode verification, session checks)
+  if (matchesRoutes(pathname, loginRoutes)) {
+    console.log('🔑 Login route detected, checking special conditions...')
+    
+    // Check if this is a login flow (indicated by special header)
+    const isLoginFlow = request.headers.get('x-login-flow') === 'true'
+    
+    if (pathname === '/api/auth/passcode/verify' && isLoginFlow) {
+      console.log('🔐 Allowing passcode verification for login flow')
+      // Add user info to headers for the API route to use
+      const response = NextResponse.next()
+      response.headers.set('x-user-id', user.userId)
+      response.headers.set('x-os-id', user.osId)
+      response.headers.set('x-username', user.username || '')
+      return response
     }
     
-    console.log('✅ Token verified for user:', user.osId)
-    console.log('🔧 Setup complete:', user.isSetupComplete)
+    if (pathname === '/api/auth/session') {
+      console.log('🔍 Session check - returning user data regardless of setup status')
+      // Always allow session checks and return current user status
+      return NextResponse.next()
+    }
+  }
+  
+  // Handle setup routes - allow if user is authenticated but setup incomplete
+  if (matchesRoutes(pathname, setupRoutes)) {
+    console.log('⚙️ Setup route detected')
     
-    // Check if user needs to complete setup (only for new users)
-    if (user.isSetupComplete === false && !setupRoutes.includes(pathname)) {
+    if (!user.isSetupComplete) {
+      console.log('✅ Allowing access to setup route for incomplete user')
+      // Add user info to headers for setup API routes
+      const response = NextResponse.next()
+      response.headers.set('x-user-id', user.userId)
+      response.headers.set('x-os-id', user.osId)
+      response.headers.set('x-username', user.username || '')
+      return response
+    } else {
+      console.log('🔄 Setup complete, redirecting to dashboard')
+      // If setup is complete, redirect to dashboard
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+  }
+  
+  // Handle protected routes - require complete setup
+  if (matchesRoutes(pathname, protectedRoutes) || pathname.startsWith('/dashboard')) {
+    if (!user.isSetupComplete) {
       console.log('⚠️ User needs setup, redirecting to setup flow')
-      // User hasn't completed setup, redirect to setup flow
+      
+      // For API routes, return 403 with setup required message
       if (pathname.startsWith('/api/')) {
-        return NextResponse.json(
-          { error: 'Setup required' },
-          { status: 403 }
-        )
+        return NextResponse.json({ 
+          error: 'Account setup required',
+          redirectTo: '/setup-account',
+          setupComplete: false
+        }, { status: 403 })
       }
       
+      // For page routes, redirect to setup
       return NextResponse.redirect(new URL('/setup-account', request.url))
     }
     
-    // Check if completed user is trying to access setup routes
-    if (user.isSetupComplete === true && setupRoutes.includes(pathname)) {
-      console.log('✅ Setup complete, redirecting to dashboard')
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
-    
-    // Add user info to request headers for API routes
-    const requestHeaders = new Headers(request.headers)
-    requestHeaders.set('x-user-id', user.userId)
-    requestHeaders.set('x-os-id', user.osId)
-    if (user.username) {
-      requestHeaders.set('x-username', user.username)
-    }
-    
-    console.log('✅ Authentication successful, proceeding to:', pathname)
-    
-    // Continue with the request
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders
-      }
-    })
-    
-  } catch (error) {
-    console.error('❌ JWT verification failed:', error)
-    
-    // Invalid token, clear it and redirect to login
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { error: 'Invalid session' },
-        { status: 401 }
-      )
-    }
-    
-    const response = NextResponse.redirect(new URL('/login', request.url))
-    // Clear the invalid cookie
-    response.cookies.delete('onestep-session')
+    console.log('✅ Full access granted to protected route')
+    // Add user info to headers for protected API routes
+    const response = NextResponse.next()
+    response.headers.set('x-user-id', user.userId)
+    response.headers.set('x-os-id', user.osId)
+    response.headers.set('x-username', user.username || '')
     return response
   }
+  
+  // Default: allow the request to proceed
+  console.log('✅ Request allowed by default')
+  return NextResponse.next()
 }
 
-// Configure which routes to run middleware on
+// Configure which routes this middleware should run on
 export const config = {
+  // Match all routes except static files and Next.js internals
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - public folder files
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

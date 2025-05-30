@@ -1,4 +1,4 @@
-// app/api/auth/session/route.ts
+// app/api/auth/session/route.ts - Improved session endpoint
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
@@ -31,23 +31,41 @@ export async function GET(request: NextRequest) {
     }
     
     console.log('✅ Session valid for user:', user.osId)
+    console.log('🔧 Setup complete:', user.isSetupComplete)
+    console.log('✅ Verified:', user.isVerified)
     
+    // Always return user data, regardless of setup status
+    // The client can decide what to do based on setup completion
     return NextResponse.json({
       authenticated: true,
       user: {
         osId: user.osId,
         username: user.username,
-        isSetupComplete: user.isSetupComplete,
-        isVerified: user.isVerified
+        isSetupComplete: user.isSetupComplete || false,
+        isVerified: user.isVerified || false
+      },
+      // Include helpful metadata
+      metadata: {
+        tokenValid: true,
+        needsSetup: !user.isSetupComplete,
+        needsVerification: !user.isVerified
       }
     })
     
   } catch (error) {
     console.error('❌ Session verification failed:', error)
     
-    return NextResponse.json({
+    // Return detailed error info for debugging in development
+    const errorResponse = {
       authenticated: false,
       error: 'Invalid session token'
-    }, { status: 401 })
+    }
+    
+    // In development, include more error details
+    if (process.env.NODE_ENV === 'development') {
+      errorResponse.error = `Session verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    }
+    
+    return NextResponse.json(errorResponse, { status: 401 })
   }
 }

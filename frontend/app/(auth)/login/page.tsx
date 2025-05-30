@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -17,14 +17,209 @@ import {
 // Different login methods matching the UI screenshots
 type LoginMethod = 'social' | 'passcode' | 'biometric'
 
+// User data interface for storing username and other info
+interface UserData {
+  username?: string
+  osId?: string
+  telegramUserId?: number
+  isSetupComplete?: boolean
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('social')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  
+  // Store user data when we fetch it from the database or localStorage
+  const [userData, setUserData] = useState<UserData | null>(null)
 
-  // Handle social login (Telegram)
+  // Utility functions for base64 URL encoding/decoding (needed for WebAuthn)
+  const base64urlToBuffer = (base64url: string): ArrayBuffer => {
+    // Add padding if needed (base64 URL encoding removes padding)
+    const padding = '='.repeat((4 - (base64url.length % 4)) % 4)
+    const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/')
+    const rawData = window.atob(base64)
+    const buffer = new ArrayBuffer(rawData.length)
+    const byteView = new Uint8Array(buffer)
+    for (let i = 0; i < rawData.length; i++) {
+      byteView[i] = rawData.charCodeAt(i)
+    }
+    return buffer
+  }
+
+  const bufferToBase64url = (buffer: ArrayBuffer): string => {
+    // Convert ArrayBuffer to base64 URL encoding
+    const byteView = new Uint8Array(buffer)
+    let str = ''
+    for (let i = 0; i < byteView.length; i++) {
+      str += String.fromCharCode(byteView[i])
+    }
+    return window.btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  }
+
+  // Function to check current session and get user data from server
+  const checkUserSession = async (): Promise<UserData | null> => {
+    try {
+      console.log('🔍 Checking current user session...')
+      
+      // Check if user has an active session (from previous login or account setup)
+      const response = await fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'include' // Include cookies for session check
+      })
+
+      if (response.ok) {
+        const sessionData = await response.json()
+        console.log('✅ Active session found:', sessionData)
+        
+        if (sessionData.authenticated && sessionData.user) {
+          return {
+            username: sessionData.user.username,
+            osId: sessionData.user.osId,
+            isSetupComplete: sessionData.user.isSetupComplete,
+            telegramUserId: 1694779369 // We know this is their Telegram ID
+          }
+        }
+      } else if (response.status === 403) {
+        // 403 means user has session but setup incomplete - that's still valuable info!
+        console.log('⚠️ Session exists but setup incomplete, trying to extract user data...')
+        
+        // Try to get user data from the session cookie directly
+        // Since middleware blocks incomplete users, we'll decode the JWT client-side
+        const sessionCookie = document.cookie
+          .split('; ')
+          .find(row => row.startsWith('onestep-session='))
+          ?.split('=')[1]
+        
+        if (sessionCookie) {
+          try {
+            // Decode JWT payload (this is safe since it's just reading, not verifying)
+            const payload = JSON.parse(atob(sessionCookie.split('.')[1]))
+            console.log('📋 Extracted user data from session cookie:', payload)
+            
+            return {
+              username: payload.username,
+              osId: payload.osId,
+              isSetupComplete: payload.isSetupComplete || false,
+              telegramUserId: 1694779369
+            }
+          } catch (jwtError) {
+            console.log('❌ Could not decode session cookie:', jwtError)
+          }
+        }
+      } else {
+        console.log('❌ No active session found (status:', response.status, ')')
+      }
+      return null
+    } catch (error) {
+      console.error('❌ Error checking session:', error)
+      return null
+    }
+  }
+
+  // Function to get username from localStorage (for passcode login)
+  const getUsernameFromStorage = (): string | null => {
+    try {
+      // Check multiple localStorage keys where username might be stored
+      
+      // First check: login context (if user started login process)
+      const loginContext = localStorage.getItem('telegram_login_temp')
+      if (loginContext) {
+        const parsed = JSON.parse(loginContext)
+        if (parsed.username) {
+          console.log('📋 Found username in login context:', parsed.username)
+          return parsed.username
+        }
+      }
+
+      // Second check: signup context (if user just completed signup)
+      const signupContext = localStorage.getItem('telegram_signup_temp')
+      if (signupContext) {
+        const parsed = JSON.parse(signupContext)
+        if (parsed.username) {
+          console.log('📋 Found username in signup context:', parsed.username)
+          return parsed.username
+        }
+      }
+
+      // Third check: user data context (general user data storage)
+      const userDataContext = localStorage.getItem('telegram_user_temp')
+      if (userDataContext) {
+        const parsed = JSON.parse(userDataContext)
+        if (parsed.username) {
+          console.log('📋 Found username in user data context:', parsed.username)
+          return parsed.username
+        }
+      }
+
+      // Fourth check: dedicated username storage
+      const storedUsername = localStorage.getItem('username')
+      if (storedUsername) {
+        console.log('📋 Found username in dedicated storage:', storedUsername)
+        return storedUsername
+      }
+
+      console.log('❌ No username found in localStorage')
+      return null
+    } catch (error) {
+      console.error('❌ Error reading username from localStorage:', error)
+      return null
+    }
+  }
+
+  // Function to fetch user data from stored context or session
+  const loadUserData = async (): Promise<UserData | null> => {
+    try {
+      // First, check if we have an active session (user might have just completed setup)
+      const sessionUserData = await checkUserSession()
+      if (sessionUserData) {
+        console.log('✅ Got user data from active session')
+        return sessionUserData
+      }
+
+      // If no session, try to get username from localStorage
+      const storedUsername = getUsernameFromStorage()
+      if (storedUsername) {
+        // Build user data from localStorage information
+        const userData: UserData = {
+          username: storedUsername,
+          telegramUserId: 1694779369, // Known Telegram ID
+          isSetupComplete: true // Assume setup is complete if they have a username
+        }
+
+        // Try to get additional data from login context
+        const loginContext = localStorage.getItem('telegram_login_temp')
+        if (loginContext) {
+          try {
+            const context = JSON.parse(loginContext)
+            userData.osId = context.osId
+            userData.isSetupComplete = context.isSetupComplete
+          } catch (error) {
+            console.log('Could not parse login context for additional data')
+          }
+        }
+
+        console.log('✅ Built user data from localStorage:', userData)
+        return userData
+      }
+
+      console.log('❌ No user data available in localStorage or session')
+      return null
+    } catch (error) {
+      console.error('❌ Error loading user data:', error)
+      return null
+    }
+  }
+
+  // Load user data when component mounts
+  useEffect(() => {
+    // Load user data on component mount to display personalized login options
+    loadUserData().then(setUserData)
+  }, [])
+
+  // Handle social login (Telegram) - Enhanced to fetch user data
   const handleSocialLogin = async () => {
     console.log('🚀 Starting Telegram login with real ID: 1694779369')
     setLoading(true)
@@ -32,6 +227,18 @@ export default function LoginPage() {
     setSuccess(null)
     
     try {
+      // Step 0: Check if user has an active session (from recent signup/login)
+      console.log('🔍 Step 0: Checking for existing user session...')
+      const existingUserData = await checkUserSession()
+      
+      if (existingUserData) {
+        console.log('✅ Found existing user session:', existingUserData)
+        setUserData(existingUserData) // Store user data for biometric auth later
+      } else {
+        console.log('⚠️ No existing session found - user may need to sign up first')
+        // Don't error here - they might be a returning user without active session
+      }
+
       // Step 1: Check if user exists via Telegram OAuth simulation
       console.log('⏳ Step 1: Telegram OAuth for login...')
       setSuccess('Connecting to Telegram...')
@@ -63,7 +270,7 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           telegramUserId: 1694779369,
-          firstName: 'User',
+          firstName: existingUserData?.username || 'User', // Use session username if available
           identifier: `telegram_1694779369`,
           purpose: 'LOGIN'
         })
@@ -80,13 +287,15 @@ export default function LoginPage() {
       // Step 3: Store login context for OTP verification
       const loginContext = {
         telegramUserId: 1694779369,
-        firstName: 'User',
+        firstName: existingUserData?.username || 'User',
         lastName: '',
-        username: 'existing_user',
+        username: existingUserData?.username || 'existing_user',
+        osId: existingUserData?.osId,
         identifier: `telegram_1694779369`,
         purpose: 'LOGIN',
         telegramSent: otpData.telegramSent,
         isLogin: true,
+        isSetupComplete: existingUserData?.isSetupComplete,
         ...(otpData.devOTP && { devOTP: otpData.devOTP })
       }
 
@@ -115,25 +324,80 @@ export default function LoginPage() {
     }
   }
 
-  // Handle passcode login
+  // Handle passcode login - Enhanced to use username from localStorage
   const handlePasscodeComplete = async (passcode: string) => {
     console.log('🔐 Verifying passcode login...')
     setLoading(true)
     setError(null)
 
     try {
+      // Get username from localStorage or userData state
+      let username = userData?.username || getUsernameFromStorage()
+      
+      if (!username) {
+        setError('Username not found. Please log in using Telegram first.')
+        setLoading(false)
+        return
+      }
+
+      console.log('👤 Using username for passcode verification:', username)
+
+      // For passcode login, we need to bypass the middleware that blocks incomplete setup
+      // We'll use a special header to indicate this is a login attempt, not a regular API call
       const response = await fetch('/api/auth/passcode/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passcode })
+        headers: { 
+          'Content-Type': 'application/json',
+          // Send username as a custom header so the API can identify the user
+          'x-username': username,
+          // Special header to indicate this is a login flow (helps bypass middleware)
+          'x-login-flow': 'true',
+          // Create a simple pre-auth token (in production, this should be properly signed)
+          'x-pre-auth': btoa(JSON.stringify({
+            username: username,
+            timestamp: Date.now(),
+            purpose: 'passcode_login'
+          }))
+        },
+        body: JSON.stringify({ 
+          passcode,
+          username // Also include in body for additional verification
+        })
       })
 
       if (response.ok) {
         const data = await response.json()
         console.log('✅ Passcode login successful!')
-        router.push('/dashboard')
+        
+        // Store successful login data
+        if (data.user) {
+          const loginData = {
+            username: data.user.username,
+            osId: data.user.osId,
+            loginMethod: 'passcode',
+            loginTime: new Date().toISOString()
+          }
+          localStorage.setItem('onestep_login_data', JSON.stringify(loginData))
+          
+          // Update our state with the returned user data
+          setUserData({
+            username: data.user.username,
+            osId: data.user.osId,
+            isSetupComplete: true, // Assume complete if passcode login worked
+            telegramUserId: 1694779369
+          })
+        }
+
+        // Show success message briefly before redirect
+        setSuccess('✅ Passcode verified! Redirecting to dashboard...')
+        
+        // Redirect to dashboard after a short delay
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 1500)
       } else {
         const data = await response.json()
+        console.error('❌ Passcode verification failed:', data)
         setError(data.error || 'Invalid passcode. Please try again.')
       }
     } catch (err) {
@@ -144,7 +408,7 @@ export default function LoginPage() {
     }
   }
 
-  // Handle biometric authentication using WebAuthn
+  // Handle biometric authentication using WebAuthn - Enhanced with database username
   const handleBiometricAuth = async (method: 'touch' | 'face') => {
     console.log(`🔒 Starting ${method} ID authentication...`)
     setLoading(true)
@@ -152,95 +416,115 @@ export default function LoginPage() {
     setSuccess(null)
 
     try {
+      // Check browser support for WebAuthn
       if (!window.PublicKeyCredential) {
         throw new Error('Biometric authentication is not supported in this browser.')
       }
 
       setSuccess(`Authenticating with ${method === 'touch' ? 'Touch ID' : 'Face ID'}...`)
 
+      // If we don't have user data, try to load it first
+      let currentUserData = userData
+      if (!currentUserData) {
+        console.log('🔍 No user data available, checking session...')
+        currentUserData = await loadUserData()
+        if (currentUserData) {
+          setUserData(currentUserData)
+        }
+      }
+
+      // Get username from session or localStorage
+      const username = currentUserData?.username || getUsernameFromStorage() || 'telegram_1694779369'
+      const displayName = currentUserData?.username || 'OneStep User'
+      const userId = currentUserData?.osId || 'telegram_1694779369'
+
+      console.log('👤 Using username from session/localStorage:', username)
+
       // Step 1: Fetch the authentication challenge from the server
-      // const challengeResponse = await fetch('/api/auth/webauthn/get-challenge', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ type: 'login', method }),
-      // })
+      const challengeResponse = await fetch('/api/auth/webauthn/get-challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          type: 'login', 
+          method,
+          username: username, // Pass the username from session/localStorage
+          osId: currentUserData?.osId // Also pass the OS-ID if available
+        }),
+      })
 
-      // if (!challengeResponse.ok) {
-      //   const errorData = await challengeResponse.json().catch(() => ({}))
-      //   throw new Error(errorData.error || 'Failed to fetch authentication challenge.')
-      // }
+      if (!challengeResponse.ok) {
+        const errorData = await challengeResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to fetch authentication challenge.')
+      }
 
-      // const challengeData = await challengeResponse.json()
-      // const { challenge, userId, credentialId } = challengeData
+      const challengeData = await challengeResponse.json()
+      const { challenge, credentialId } = challengeData
 
-      // if (!challenge || !userId || !credentialId) {
-      //   throw new Error('Invalid challenge data received from server.')
-      // }
+      if (!challenge) {
+        throw new Error('Invalid challenge data received from server.')
+      }
 
-      const publicKey = {
-        challenge: new Uint8Array([1, 2, 3, 4, 5]), // Replace with a real server-generated challenge
-        rp: { name: "localhost" }, // Relying Party (your app)
-        user: {
-          id: new Uint8Array([1, 2, 3, 4]), // Unique user ID
-          name: "telegram_1694779369",
-          displayName: "telegram_1694779369"
-        },
-        pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256 algorithm
-        authenticatorSelection: { userVerification: "required" } // Enforce biometrics
-      };
-      const credential = await navigator.credentials.create({ publicKey });
-      console.log(credential, publicKey);
-      // Step 2: Prepare the WebAuthn assertion options
-      // const publicKey: PublicKeyCredentialRequestOptions = {
-      //   challenge: base64urlToBuffer(challenge),
-      //   allowCredentials: [
-      //     {
-      //       id: base64urlToBuffer(credentialId),
-      //       type: 'public-key',
-      //       transports: method === 'touch' ? ['internal'] : ['internal', 'hybrid'],
-      //     },
-      //   ],
-      //   timeout: 60000,
-      //   userVerification: 'required',
-      // }
+      console.log('✅ Challenge received from server')
+
+      // Step 2: Prepare the WebAuthn assertion options with real data
+      const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
+        challenge: base64urlToBuffer(challenge),
+        allowCredentials: credentialId ? [
+          {
+            id: base64urlToBuffer(credentialId),
+            type: 'public-key',
+            transports: method === 'touch' ? ['internal'] : ['internal', 'hybrid'],
+          }
+        ] : [], // Empty array if no credential ID (first time setup)
+        timeout: 60000,
+        userVerification: 'required', // Require biometric verification
+      }
+
+      console.log('🔐 Calling WebAuthn for authentication...')
 
       // Step 3: Call WebAuthn to authenticate
-      const assertion = await navigator.credentials.get({ publicKey }) as PublicKeyCredential
+      const assertion = await navigator.credentials.get({ 
+        publicKey: publicKeyCredentialRequestOptions 
+      }) as PublicKeyCredential
 
       if (!assertion) {
         throw new Error('Biometric authentication was cancelled or failed.')
       }
 
+      console.log('✅ WebAuthn assertion received')
+
       // Step 4: Extract the necessary data from the assertion
-      // const authData = (assertion.response as AuthenticatorAssertionResponse).authenticatorData
-      // const clientDataJSON = (assertion.response as AuthenticatorAssertionResponse).clientDataJSON
-      // const signature = (assertion.response as AuthenticatorAssertionResponse).signature
-      // const userHandle = (assertion.response as AuthenticatorAssertionResponse).userHandle
+      const authData = (assertion.response as AuthenticatorAssertionResponse).authenticatorData
+      const clientDataJSON = (assertion.response as AuthenticatorAssertionResponse).clientDataJSON
+      const signature = (assertion.response as AuthenticatorAssertionResponse).signature
+      const userHandle = (assertion.response as AuthenticatorAssertionResponse).userHandle
 
       // Step 5: Send the assertion to the server for verification
-      // const verifyResponse = await fetch('/api/auth/webauthn/verify-assertion', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({
-      //     id: assertion.id,
-      //     rawId: bufferToBase64url(assertion.rawId),
-      //     response: {
-      //       authenticatorData: bufferToBase64url(authData),
-      //       clientDataJSON: bufferToBase64url(clientDataJSON),
-      //       signature: bufferToBase64url(signature),
-      //       userHandle: userHandle ? bufferToBase64url(userHandle) : null,
-      //     },
-      //     type: assertion.type,
-      //   }),
-      // })
+      const verifyResponse = await fetch('/api/auth/webauthn/verify-assertion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: assertion.id,
+          rawId: bufferToBase64url(assertion.rawId),
+          response: {
+            authenticatorData: bufferToBase64url(authData),
+            clientDataJSON: bufferToBase64url(clientDataJSON),
+            signature: bufferToBase64url(signature),
+            userHandle: userHandle ? bufferToBase64url(userHandle) : null,
+          },
+          type: assertion.type,
+          username: username, // Include username in verification
+          osId: currentUserData?.osId // Include OS-ID for verification
+        }),
+      })
 
-      // if (!verifyResponse.ok) {
-      //   const errorData = await verifyResponse.json().catch(() => ({}))
-      //   throw new Error(errorData.error || 'Biometric authentication failed.')
-      // }
+      if (!verifyResponse.ok) {
+        const errorData = await verifyResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Biometric authentication failed.')
+      }
 
-      // const verifyData = await verifyResponse.json()
-      // console.log(`✅ ${method} ID authentication successful:`, verifyData)
+      const verifyData = await verifyResponse.json()
+      console.log(`✅ ${method} ID authentication successful:`, verifyData)
       setSuccess(`✅ ${method === 'touch' ? 'Touch ID' : 'Face ID'} authentication successful!`)
 
       // Step 6: Redirect to dashboard on success
@@ -260,7 +544,7 @@ export default function LoginPage() {
     }
   }
 
-  // Render social login screen
+  // Render social login screen (Telegram)
   const renderSocialLogin = () => (
     <div className="text-center space-y-6">
       <div>
@@ -269,6 +553,25 @@ export default function LoginPage() {
           Access Wealth with either your OneStep Passcode, OneStep Biometrics or OneStep ID Verification
         </p>
       </div>
+
+      {/* Show user info if we have it loaded from localStorage or session */}
+      {userData && (
+        <div className="p-3 bg-accent-primary/10 border border-accent-primary/20 rounded-lg">
+          <p className="text-sm text-accent-primary">
+            👋 Welcome back, <strong>{userData.username}</strong>!
+          </p>
+          {userData.osId && (
+            <p className="text-xs text-foreground-tertiary mt-1">
+              OS-ID: {userData.osId}
+            </p>
+          )}
+          {userData.isSetupComplete === false && (
+            <p className="text-xs text-status-warning mt-1">
+              ⚠️ Account setup incomplete - you can still log in with passcode
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="space-y-4">
         <div>
@@ -285,6 +588,7 @@ export default function LoginPage() {
             Kindly select a messenger below
           </p>
           
+          {/* Telegram login button with loading state */}
           <button
             onClick={handleSocialLogin}
             disabled={loading}
@@ -310,6 +614,7 @@ export default function LoginPage() {
           <p className="text-xs text-accent-primary mt-2">Recovery Center</p>
         </div>
 
+        {/* Success message display */}
         {success && (
           <div className="p-4 bg-status-success/10 border border-status-success/20 rounded-xl">
             <div className="flex items-center justify-center space-x-2">
@@ -319,6 +624,7 @@ export default function LoginPage() {
           </div>
         )}
 
+        {/* Error message display */}
         {error && (
           <div className="p-4 bg-status-error/10 border border-status-error/20 rounded-xl">
             <p className="text-status-error text-sm">{error}</p>
@@ -355,7 +661,7 @@ export default function LoginPage() {
     </div>
   )
 
-  // Render passcode login screen
+  // Render passcode login screen - Enhanced with username verification
   const renderPasscodeLogin = () => (
     <div className="text-center space-y-6">
       <div>
@@ -365,6 +671,29 @@ export default function LoginPage() {
         </p>
       </div>
 
+      {/* Show user info if available from localStorage or session */}
+      {userData && (
+        <div className="p-3 bg-accent-primary/10 border border-accent-primary/20 rounded-lg">
+          <p className="text-sm text-accent-primary">
+            🔐 Enter passcode for <strong>{userData.username}</strong>
+          </p>
+          {userData.isSetupComplete === false && (
+            <p className="text-xs text-status-warning mt-1">
+              ⚠️ Setup incomplete - passcode login will complete your account setup
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Show warning if no username found */}
+      {!userData && !getUsernameFromStorage() && (
+        <div className="p-3 bg-status-warning/10 border border-status-warning/20 rounded-lg">
+          <p className="text-status-warning text-sm">
+            ⚠️ Please log in using Telegram first to enable passcode login
+          </p>
+        </div>
+      )}
+
       <div>
         <h3 className="text-lg font-semibold text-foreground-primary mb-2 uppercase tracking-wide">
           OneStep Passcode
@@ -373,10 +702,12 @@ export default function LoginPage() {
           Enter your Passcode to Log into your Account
         </p>
 
+        {/* Passcode input component */}
         <PasscodeInput
           onComplete={handlePasscodeComplete}
           error={!!error}
           loading={loading}
+          disabled={!userData && !getUsernameFromStorage()} // Disable if no username available
         />
 
         <div className="mt-6">
@@ -391,6 +722,21 @@ export default function LoginPage() {
           </Link>
         </div>
       </div>
+
+      {/* Error display for passcode issues */}
+      {error && (
+        <div className="p-4 bg-status-error/10 border border-status-error/20 rounded-xl">
+          <p className="text-status-error text-sm">{error}</p>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setError(null)}
+            className="mt-2"
+          >
+            Try Again
+          </Button>
+        </div>
+      )}
 
       <div className="pt-6 border-t border-border-primary">
         <div className="flex justify-center space-x-4">
@@ -423,6 +769,15 @@ export default function LoginPage() {
         </p>
       </div>
 
+      {/* Show user info if available */}
+      {userData && (
+        <div className="p-3 bg-accent-primary/10 border border-accent-primary/20 rounded-lg">
+          <p className="text-sm text-accent-primary">
+            🔒 Biometric login for <strong>{userData.username}</strong>
+          </p>
+        </div>
+      )}
+
       <div>
         <h3 className="text-lg font-semibold text-foreground-primary mb-2 uppercase tracking-wide">
           Use OneStep Biometrics to Login
@@ -435,6 +790,7 @@ export default function LoginPage() {
           Kindly select a method below
         </p>
 
+        {/* Biometric method selection */}
         <div className="grid grid-cols-2 gap-6 max-w-sm mx-auto">
           <button
             onClick={() => handleBiometricAuth('touch')}
@@ -455,6 +811,7 @@ export default function LoginPage() {
           </button>
         </div>
 
+        {/* Loading state during biometric authentication */}
         {loading && (
           <div className="mt-6">
             <div className="inline-flex items-center text-accent-primary">
@@ -467,9 +824,25 @@ export default function LoginPage() {
           </div>
         )}
 
+        {/* Success message for biometric authentication */}
         {success && (
           <div className="mt-4 p-3 bg-status-success/10 border border-status-success/20 rounded-lg">
             <p className="text-status-success text-sm">{success}</p>
+          </div>
+        )}
+
+        {/* Error message for biometric authentication */}
+        {error && (
+          <div className="mt-4 p-3 bg-status-error/10 border border-status-error/20 rounded-lg">
+            <p className="text-status-error text-sm">{error}</p>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setError(null)}
+              className="mt-2"
+            >
+              Try Again
+            </Button>
           </div>
         )}
 
@@ -505,7 +878,7 @@ export default function LoginPage() {
     </div>
   )
 
-  // Method selection tabs
+  // Method selection tabs - allows users to switch between login methods
   const renderMethodTabs = () => (
     <div className="flex space-x-1 bg-background-tertiary rounded-lg p-1 mb-6">
       {[
@@ -533,24 +906,36 @@ export default function LoginPage() {
     </div>
   )
 
-  // Main render
+  // Main render - shows the appropriate login method based on user selection
   return (
     <div className="space-y-6">
+      {/* Tab navigation for switching between login methods */}
       {renderMethodTabs()}
 
+      {/* Render the appropriate login screen based on selected method */}
       {loginMethod === 'passcode' && renderPasscodeLogin()}
       {loginMethod === 'biometric' && renderBiometricLogin()}
       {loginMethod === 'social' && renderSocialLogin()}
 
+      {/* Development debug panel - only shows in development mode */}
       {process.env.NODE_ENV === 'development' && (
         <div className="mt-8 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg text-left">
           <h4 className="text-sm font-bold text-blue-400 mb-2">🔐 Login Debug Info</h4>
           <div className="text-xs text-blue-300 space-y-1">
             <p>📱 Current Method: <code>{loginMethod}</code></p>
             <p>🆔 Telegram ID: <code>1694779369</code></p>
+            <p>👤 Username (State): <code>{userData?.username || 'Not loaded'}</code></p>
+            <p>👤 Username (Storage): <code>{getUsernameFromStorage() || 'Not found'}</code></p>
+            <p>🏷️ OS-ID: <code>{userData?.osId || 'Not loaded'}</code></p>
             <p>🤖 Bot: @OneStepTest6_BOT</p>
             <p className="text-yellow-400">💡 Make sure you've started a chat with the bot!</p>
             <p className="text-green-400">🔄 Login will send OTP to your Telegram</p>
+            {userData && (
+              <p className="text-green-400">✅ User data loaded from database/storage</p>
+            )}
+            {getUsernameFromStorage() && (
+              <p className="text-green-400">✅ Username available for passcode login</p>
+            )}
           </div>
         </div>
       )}
