@@ -24,29 +24,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  // Utility to convert base64 URL to ArrayBuffer
-  const base64urlToBuffer = (base64url: string): ArrayBuffer => {
-    const padding = '='.repeat((4 - (base64url.length % 4)) % 4)
-    const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/')
-    const rawData = window.atob(base64)
-    const buffer = new ArrayBuffer(rawData.length)
-    const byteView = new Uint8Array(buffer)
-    for (let i = 0; i < rawData.length; i++) {
-      byteView[i] = rawData.charCodeAt(i)
-    }
-    return buffer
-  }
-
-  // Utility to convert ArrayBuffer to base64 URL
-  const bufferToBase64url = (buffer: ArrayBuffer): string => {
-    const byteView = new Uint8Array(buffer)
-    let str = ''
-    for (let i = 0; i < byteView.length; i++) {
-      str += String.fromCharCode(byteView[i])
-    }
-    return window.btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-  }
-
   // Handle social login (Telegram)
   const handleSocialLogin = async () => {
     console.log('🚀 Starting Telegram login with real ID: 1694779369')
@@ -205,14 +182,14 @@ export default function LoginPage() {
         rp: { name: "localhost" }, // Relying Party (your app)
         user: {
           id: new Uint8Array([1, 2, 3, 4]), // Unique user ID
-          name: "test@localhost",
-          displayName: "Test User"
+          name: "telegram_1694779369",
+          displayName: "telegram_1694779369"
         },
         pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256 algorithm
         authenticatorSelection: { userVerification: "required" } // Enforce biometrics
       };
       const credential = await navigator.credentials.create({ publicKey });
-      console.log(credential);
+      console.log(credential, publicKey);
       // Step 2: Prepare the WebAuthn assertion options
       // const publicKey: PublicKeyCredentialRequestOptions = {
       //   challenge: base64urlToBuffer(challenge),
