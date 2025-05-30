@@ -1,4 +1,4 @@
-// middleware.ts - Enhanced middleware to handle login flows properly
+// middleware.ts - Enhanced middleware to handle signup->setup flow properly
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 
@@ -23,7 +23,9 @@ const publicRoutes = [
   '/api/auth/webauthn/verify-assertion',
   '/api/sso/validate',
   '/api/telegram/setup',
-  '/api/telegram/webhook'
+  '/api/telegram/webhook',
+  '/setup-account',
+  '/api/auth/setup-account',
 ]
 
 // Routes that allow incomplete setup (for user account creation flow)
@@ -88,6 +90,23 @@ async function verifyToken(token: string) {
   }
 }
 
+// Helper function to check if username exists in the client-side localStorage
+// Note: This is a workaround since middleware runs on server-side
+function shouldRedirectToSetup(user: any, request: NextRequest): boolean {
+  // Primary check: JWT token indicates setup is incomplete
+  if (!user.isSetupComplete) {
+    return true
+  }
+  
+  // Secondary check: Username not set in JWT (indicates incomplete setup)
+  if (!user.username || user.username === '' || user.username === 'User') {
+    return true
+  }
+  
+  // If all checks pass, setup is complete
+  return false
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
@@ -134,6 +153,7 @@ export async function middleware(request: NextRequest) {
   
   console.log('✅ Token verified for user:', user.osId)
   console.log('🏁 Setup complete:', user.isSetupComplete)
+  console.log('👤 Username:', user.username)
   
   // Special handling for login routes (passcode verification, session checks)
   if (matchesRoutes(pathname, loginRoutes)) {
@@ -163,13 +183,17 @@ export async function middleware(request: NextRequest) {
   if (matchesRoutes(pathname, setupRoutes)) {
     console.log('⚙️ Setup route detected')
     
-    if (!user.isSetupComplete) {
+    // Check if user needs setup based on our improved logic
+    const needsSetup = shouldRedirectToSetup(user, request)
+    
+    if (needsSetup) {
       console.log('✅ Allowing access to setup route for incomplete user')
       // Add user info to headers for setup API routes
       const response = NextResponse.next()
       response.headers.set('x-user-id', user.userId)
       response.headers.set('x-os-id', user.osId)
       response.headers.set('x-username', user.username || '')
+      response.headers.set('x-setup-required', 'true')
       return response
     } else {
       console.log('🔄 Setup complete, redirecting to dashboard')
@@ -180,7 +204,9 @@ export async function middleware(request: NextRequest) {
   
   // Handle protected routes - require complete setup
   if (matchesRoutes(pathname, protectedRoutes) || pathname.startsWith('/dashboard')) {
-    if (!user.isSetupComplete) {
+    const needsSetup = shouldRedirectToSetup(user, request)
+    
+    if (needsSetup) {
       console.log('⚠️ User needs setup, redirecting to setup flow')
       
       // For API routes, return 403 with setup required message
@@ -188,7 +214,8 @@ export async function middleware(request: NextRequest) {
         return NextResponse.json({ 
           error: 'Account setup required',
           redirectTo: '/setup-account',
-          setupComplete: false
+          setupComplete: false,
+          reason: 'Username or profile incomplete'
         }, { status: 403 })
       }
       
@@ -202,6 +229,7 @@ export async function middleware(request: NextRequest) {
     response.headers.set('x-user-id', user.userId)
     response.headers.set('x-os-id', user.osId)
     response.headers.set('x-username', user.username || '')
+    response.headers.set('x-setup-complete', 'true')
     return response
   }
   
