@@ -26,6 +26,14 @@ const publicRoutes = [
   '/api/telegram/webhook',
   '/setup-account',
   '/api/auth/setup-account',
+  '/api/auth/passcode/verify',
+  '/setup-passcode', 
+  '/biometrics',
+  '/complete-profile',
+  '/api/auth/passcode/create',
+  '/api/security/avv',
+  '/biometric',
+  
 ]
 
 // Routes that allow incomplete setup (for user account creation flow)
