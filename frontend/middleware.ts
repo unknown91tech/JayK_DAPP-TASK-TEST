@@ -14,7 +14,8 @@ const publicRoutes = [
   '/recovery',
   '/dashboard',
   '/setup-account',
-  '/setup-password'
+  '/setup-password',
+  '/biometrics',
 ]
 
 // API routes that don't require authentication
@@ -29,6 +30,8 @@ const publicApiRoutes = [
   '/api/auth/webauthn/get-challenge',
   '/api/auth/webauthn/verify-assertion',
   '/api/auth/setup-account',
+  '/api/security/avv',
+  '/api/auth/passcode/create',
 
   // SSO validation endpoints (they have their own auth)
   '/api/sso/validate'

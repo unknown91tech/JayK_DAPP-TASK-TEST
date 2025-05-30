@@ -1,298 +1,344 @@
-// lib/db/prisma.ts
+// lib/db/prisma.ts - Database helper functions
 import { PrismaClient } from '@prisma/client'
 
-// Global variable to store the Prisma client instance
-// This prevents multiple instances in development due to hot reloading
+// Create a global prisma instance to avoid connection issues
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-// Create Prisma client with logging for development
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  errorFormat: 'pretty',
 })
 
-// In development, store the client globally to prevent multiple instances
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma
-}
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-// Middleware to handle common operations and logging
-prisma.$use(async (params, next) => {
-  const before = Date.now()
+// Helper function to generate unique OS-ID (OneStep ID)
+export function generateOsId(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let result = 'OS' // Prefix for OneStep
   
-  // Execute the query
-  const result = await next(params)
-  
-  const after = Date.now()
-  
-  // Log slow queries in development
-  if (process.env.NODE_ENV === 'development' && after - before > 1000) {
-    console.log(`⚠️  Slow Query: ${params.model}.${params.action} took ${after - before}ms`)
+  // Generate 7 random characters for a total of 9 characters (OS + 7)
+  for (let i = 0; i < 7; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   
-  return result
-})
-
-// Utility functions for common database operations
-
-/**
- * Find user by OS-ID (most common lookup)
- */
-export async function findUserByOsId(osId: string) {
-  return prisma.user.findUnique({
-    where: { osId },
-    include: {
-      devices: true,
-      biometrics: true,
-      socialLogins: true,
-    }
-  })
+  return result // Example: "OS7K2M4N9"
 }
 
-/**
- * Find user by username
- */
-export async function findUserByUsername(username: string) {
-  return prisma.user.findUnique({
-    where: { username },
-    include: {
-      devices: true,
-      socialLogins: true,
-    }
-  })
-}
-
-/**
- * Check if username is available
- */
+// Helper function to check if username is available
 export async function isUsernameAvailable(username: string): Promise<boolean> {
-  const existingUser = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true }
-  })
-  return !existingUser
+  try {
+    const existingUser = await prisma.user.findUnique({
+      where: { username: username.toLowerCase() }
+    })
+    return !existingUser
+  } catch (error) {
+    console.error('Error checking username availability:', error)
+    throw new Error('Failed to check username availability')
+  }
 }
 
-/**
- * Get user's active devices (for device management - max 5)
- */
+// Helper function to find user by OS-ID
+export async function findUserByOsId(osId: string) {
+  try {
+    return await prisma.user.findUnique({
+      where: { osId },
+      include: {
+        socialLogins: true,
+        devices: {
+          where: { isActive: true }
+        }
+      }
+    })
+  } catch (error) {
+    console.error('Error finding user by OS-ID:', error)
+    throw new Error('Failed to find user')
+  }
+}
+
+// Helper function to get user's active devices
 export async function getUserActiveDevices(userId: string) {
-  return prisma.device.findMany({
-    where: {
-      userId,
-      isActive: true
-    },
-    orderBy: {
-      lastUsedAt: 'desc'
-    }
-  })
+  try {
+    return await prisma.device.findMany({
+      where: {
+        userId,
+        isActive: true
+      },
+      orderBy: {
+        lastUsedAt: 'desc'
+      }
+    })
+  } catch (error) {
+    console.error('Error getting user devices:', error)
+    throw new Error('Failed to get user devices')
+  }
 }
 
-/**
- * Log security events for monitoring
- */
-export async function logSecurityEvent(data: {
+// Helper function for logging security events
+interface SecurityLogData {
   userId?: string
   eventType: string
-  description?: string
+  description: string
   metadata?: any
   ipAddress?: string
   userAgent?: string
   deviceId?: string
   riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
-}) {
-  return prisma.securityLog.create({
-    data: {
-      ...data,
-      riskLevel: data.riskLevel || 'LOW',
-    }
-  })
 }
 
-/**
- * Log AVV (Auto-Verification & Validation) checks
- */
-export async function logAvvCheck(data: {
+export async function logSecurityEvent(data: SecurityLogData) {
+  try {
+    await prisma.securityLog.create({
+      data: {
+        userId: data.userId,
+        eventType: data.eventType,
+        description: data.description,
+        metadata: data.metadata || {},
+        ipAddress: data.ipAddress,
+        userAgent: data.userAgent,
+        deviceId: data.deviceId,
+        riskLevel: data.riskLevel || 'LOW'
+      }
+    })
+    console.log('✅ Security event logged:', data.eventType)
+  } catch (error) {
+    console.error('❌ Failed to log security event:', error)
+    // Don't throw error as logging shouldn't break the main flow
+  }
+}
+
+// Helper function for logging AVV (Auto-Verification & Validation) checks
+interface AvvLogData {
   userId: string
   checkType: string
   input?: string
   result: 'PASS' | 'FAIL' | 'WARNING'
   reason?: string
   metadata?: any
-}) {
-  return prisma.avvLog.create({
-    data
-  })
 }
 
-/**
- * Create or update OTP verification record
- */
-export async function upsertOtpVerification(data: {
+export async function logAvvCheck(data: AvvLogData) {
+  try {
+    await prisma.avvLog.create({
+      data: {
+        userId: data.userId,
+        checkType: data.checkType,
+        input: data.input,
+        result: data.result,
+        reason: data.reason,
+        metadata: data.metadata || {}
+      }
+    })
+    console.log('✅ AVV check logged:', data.checkType, data.result)
+  } catch (error) {
+    console.error('❌ Failed to log AVV check:', error)
+  }
+}
+
+// Helper function to create/update OTP verification records
+interface OtpData {
   identifier: string
   code: string
   purpose: 'LOGIN' | 'SIGNUP' | 'RESET_PASSWORD' | 'VERIFY_PHONE' | 'VERIFY_EMAIL'
   expiresAt: Date
-}) {
-  // First, deactivate any existing OTP for this identifier
-  await prisma.otpVerification.updateMany({
-    where: {
-      identifier: data.identifier,
-      purpose: data.purpose,
-      isUsed: false
-    },
-    data: {
-      isUsed: true
-    }
-  })
-  
-  // Create new OTP record
-  return prisma.otpVerification.create({
-    data
-  })
 }
 
-/**
- * Verify OTP code
- */
+export async function upsertOtpVerification(data: OtpData) {
+  try {
+    return await prisma.otpVerification.upsert({
+      where: {
+        // Create composite unique constraint on identifier + purpose
+        id: `${data.identifier}_${data.purpose}`
+      },
+      update: {
+        code: data.code,
+        expiresAt: data.expiresAt,
+        attempts: 0, // Reset attempts on new OTP
+        isUsed: false,
+        verifiedAt: null
+      },
+      create: {
+        identifier: data.identifier,
+        code: data.code,
+        purpose: data.purpose,
+        expiresAt: data.expiresAt,
+        attempts: 0,
+        isUsed: false
+      }
+    })
+  } catch (error) {
+    console.error('Error upserting OTP verification:', error)
+    throw new Error('Failed to store OTP verification')
+  }
+}
+
+// Helper function to verify OTP
 export async function verifyOtp(identifier: string, code: string, purpose: string) {
-  const otpRecord = await prisma.otpVerification.findFirst({
-    where: {
-      identifier,
-      purpose,
-      isUsed: false,
-      expiresAt: {
-        gt: new Date()
+  try {
+    // Find the OTP record
+    const otpRecord = await prisma.otpVerification.findFirst({
+      where: {
+        identifier,
+        purpose,
+        isUsed: false,
+        expiresAt: {
+          gt: new Date() // Not expired
+        }
+      }
+    })
+
+    if (!otpRecord) {
+      return {
+        success: false,
+        error: 'OTP not found or expired'
       }
     }
-  })
-  
-  if (!otpRecord) {
-    return { success: false, error: 'Invalid or expired OTP' }
-  }
-  
-  // Check if max attempts exceeded
-  if (otpRecord.attempts >= otpRecord.maxAttempts) {
-    return { success: false, error: 'Maximum attempts exceeded' }
-  }
-  
-  // Increment attempts
-  await prisma.otpVerification.update({
-    where: { id: otpRecord.id },
-    data: { attempts: otpRecord.attempts + 1 }
-  })
-  
-  // Verify code (in production, you'd hash the stored code)
-  if (otpRecord.code !== code) {
-    return { success: false, error: 'Invalid OTP code' }
-  }
-  
-  // Mark as used
-  await prisma.otpVerification.update({
-    where: { id: otpRecord.id },
-    data: { isUsed: true }
-  })
-  
-  return { success: true }
-}
 
-/**
- * Clean up expired OTP records (should be run periodically)
- */
-export async function cleanupExpiredOtps() {
-  const result = await prisma.otpVerification.deleteMany({
-    where: {
-      OR: [
-        {
-          expiresAt: {
-            lt: new Date()
-          }
-        },
-        {
-          isUsed: true,
-          createdAt: {
-            lt: new Date(Date.now() - 24 * 60 * 60 * 1000) // 24 hours ago
-          }
-        }
-      ]
+    // Check attempts limit
+    if (otpRecord.attempts >= otpRecord.maxAttempts) {
+      return {
+        success: false,
+        error: 'Too many failed attempts'
+      }
     }
-  })
-  
-  console.log(`🧹 Cleaned up ${result.count} expired OTP records`)
-  return result
+
+    // Verify the code
+    if (otpRecord.code !== code) {
+      // Increment attempts
+      await prisma.otpVerification.update({
+        where: { id: otpRecord.id },
+        data: { attempts: otpRecord.attempts + 1 }
+      })
+
+      return {
+        success: false,
+        error: `Invalid OTP. ${otpRecord.maxAttempts - otpRecord.attempts - 1} attempts remaining.`
+      }
+    }
+
+    // Mark as used
+    await prisma.otpVerification.update({
+      where: { id: otpRecord.id },
+      data: {
+        isUsed: true,
+        verifiedAt: new Date()
+      }
+    })
+
+    return {
+      success: true,
+      message: 'OTP verified successfully'
+    }
+
+  } catch (error) {
+    console.error('Error verifying OTP:', error)
+    return {
+      success: false,
+      error: 'OTP verification failed'
+    }
+  }
 }
 
-/**
- * Create SSO session for external dApp access
- */
-export async function createSsoSession(data: {
+// Helper function to create SSO sessions
+interface SsoSessionData {
   userId: string
   osId: string
   dappId: string
   sessionToken: string
   expiresAt: Date
-}) {
-  return prisma.ssoSession.create({
-    data
-  })
 }
 
-/**
- * Validate SSO session
- */
-export async function validateSsoSession(sessionToken: string) {
-  return prisma.ssoSession.findUnique({
-    where: {
-      sessionToken,
-      isActive: true,
-      expiresAt: {
-        gt: new Date()
+export async function createSsoSession(data: SsoSessionData) {
+  try {
+    return await prisma.ssoSession.create({
+      data: {
+        userId: data.userId,
+        osId: data.osId,
+        dappId: data.dappId,
+        sessionToken: data.sessionToken,
+        expiresAt: data.expiresAt
       }
-    },
-    include: {
-      // We'll need to join with user table through osId
-      // This would require adjusting the schema to add the relation
-    }
-  })
+    })
+  } catch (error) {
+    console.error('Error creating SSO session:', error)
+    throw new Error('Failed to create SSO session')
+  }
 }
 
-/**
- * Get security logs for monitoring dashboard
- */
-export async function getSecurityLogs(params: {
-  userId?: string
-  eventType?: string
-  riskLevel?: string
-  limit?: number
-  offset?: number
-}) {
-  const { userId, eventType, riskLevel, limit = 50, offset = 0 } = params
-  
-  return prisma.securityLog.findMany({
-    where: {
-      ...(userId && { userId }),
-      ...(eventType && { eventType }),
-      ...(riskLevel && { riskLevel }),
-    },
-    orderBy: {
-      createdAt: 'desc'
-    },
-    take: limit,
-    skip: offset,
-    include: {
-      user: {
-        select: {
-          username: true,
-          osId: true
+// Helper function to validate SSO sessions
+export async function validateSsoSession(sessionToken: string) {
+  try {
+    const session = await prisma.ssoSession.findUnique({
+      where: {
+        sessionToken,
+        isActive: true,
+        expiresAt: {
+          gt: new Date()
         }
       }
-    }
-  })
+    })
+
+    return session
+  } catch (error) {
+    console.error('Error validating SSO session:', error)
+    return null
+  }
 }
 
-// Graceful shutdown
-process.on('beforeExit', async () => {
-  await prisma.$disconnect()
-})
+// Helper function to clean up expired records (run periodically)
+export async function cleanupExpiredRecords() {
+  try {
+    const now = new Date()
+    
+    // Clean up expired OTP verifications
+    const expiredOtps = await prisma.otpVerification.deleteMany({
+      where: {
+        expiresAt: {
+          lt: now
+        }
+      }
+    })
+
+    // Clean up expired SSO sessions
+    const expiredSessions = await prisma.ssoSession.updateMany({
+      where: {
+        expiresAt: {
+          lt: now
+        },
+        isActive: true
+      },
+      data: {
+        isActive: false
+      }
+    })
+
+    console.log(`🧹 Cleanup complete: ${expiredOtps.count} OTPs, ${expiredSessions.count} SSO sessions`)
+    
+    return {
+      expiredOtps: expiredOtps.count,
+      expiredSessions: expiredSessions.count
+    }
+  } catch (error) {
+    console.error('Error during cleanup:', error)
+    throw new Error('Cleanup failed')
+  }
+}
+
+// Test database connection
+export async function testDatabaseConnection() {
+  try {
+    await prisma.$connect()
+    console.log('✅ Database connected successfully')
+    
+    // Test a simple query
+    const userCount = await prisma.user.count()
+    console.log(`📊 Current user count: ${userCount}`)
+    
+    return true
+  } catch (error) {
+    console.error('❌ Database connection failed:', error)
+    return false
+  } finally {
+    await prisma.$disconnect()
+  }
+}

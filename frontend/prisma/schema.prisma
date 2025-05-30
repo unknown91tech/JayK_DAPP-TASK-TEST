@@ -1,256 +1,294 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../app/generated/prisma"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "postgresql" 
   url      = env("DATABASE_URL")
 }
 
-// User model - core user information
+// Main user model - the core of our authentication system
 model User {
-  id            String    @id @default(cuid())
-  osId          String    @unique @map("os_id") // OneStep ID - universal identifier
-  username      String    @unique
-  email         String?   @unique
-  phoneNumber   String?   @unique @map("phone_number")
-  firstName     String?   @map("first_name")
-  lastName      String?   @map("last_name")
-  dateOfBirth   DateTime? @map("date_of_birth")
+  id          String   @id @default(cuid()) // Internal database ID
+  osId        String   @unique // OneStep ID - public identifier (e.g., OS7K2M4N9)
+  username    String?  @unique // User-chosen username (6-20 chars)
+  email       String?  @unique // Email address (optional initially)
+  phoneNumber String?  @unique // Phone number for verification
   
-  // Authentication fields
-  passcodeHash  String?   @map("passcode_hash") // Hashed 6-digit passcode
-  isVerified    Boolean   @default(false) @map("is_verified")
+  // Personal information
+  firstName    String? // First name
+  lastName     String? // Last name
+  dateOfBirth  DateTime? // Used for age verification and passcode validation
   
-  // KYC/AML fields
-  kycStatus     KycStatus @default(PENDING) @map("kyc_status")
-  kycData       Json?     @map("kyc_data") // Store KYC information as JSON
+  // Authentication data
+  passcodeHash String? // Hashed 6-digit passcode
   
-  // Timestamps
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  lastLoginAt   DateTime? @map("last_login_at")
-  
-  // Relations
-  socialLogins    SocialLogin[]
-  devices         Device[]
-  biometrics      BiometricCredential[]
-  securityLogs    SecurityLog[]
-  avvLogs         AvvLog[]
-  
-  @@map("users")
-}
-
-// Social login integration (focusing on Telegram)
-model SocialLogin {
-  id           String      @id @default(cuid())
-  userId       String      @map("user_id")
-  provider     SocialProvider
-  providerId   String      @map("provider_id") // Telegram user ID
-  providerData Json?       @map("provider_data") // Additional provider data
-  isActive     Boolean     @default(true) @map("is_active")
+  // Account status
+  isVerified      Boolean @default(false) // Phone/email verified through OTP
+  isSetupComplete Boolean @default(false) // All setup steps completed
+  kycStatus       String  @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, APPROVED, REJECTED
+  kycData         Json?   // Encrypted KYC information
   
   // Timestamps
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLoginAt DateTime?
   
-  // Relations
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Related records - these create the relationships
+  devices      Device[]         // User's registered devices (max 5)
+  biometrics   Biometric[]      // Biometric authentication data
+  socialLogins SocialLogin[]    // Social media logins (Telegram, etc.)
+  securityLogs SecurityLog[]    // Security events for this user
+  avvLogs      AvvLog[]         // Auto-verification logs
+  ssoSessions  SsoSession[]     // Single sign-on sessions
+  backupCodes  BackupCode[]     // Recovery codes
   
-  @@unique([provider, providerId])
-  @@map("social_logins")
+  @@map("users") // This will be the actual table name in the database
 }
 
-// Device management (max 5 devices per user)
+// Device management - users can register up to 5 devices for security
 model Device {
-  id            String      @id @default(cuid())
-  userId        String      @map("user_id")
-  deviceName    String      @map("device_name")
-  deviceType    DeviceType  @map("device_type")
-  fingerprint   String      @unique // Device fingerprint for identification
-  userAgent     String?     @map("user_agent")
-  ipAddress     String?     @map("ip_address")
-  isActive      Boolean     @default(true) @map("is_active")
-  isTrusted     Boolean     @default(false) @map("is_trusted")
+  id          String   @id @default(cuid())
+  userId      String   // Foreign key linking to User table
+  deviceName  String   // User-friendly name like "iPhone 15", "MacBook Pro"
+  deviceType  String   // mobile, tablet, desktop, unknown
+  fingerprint String   @unique // Unique device identifier hash
+  userAgent   String   // Browser/app user agent string
+  ipAddress   String   // IP address when device was registered
+  isActive    Boolean  @default(true) // Can be deactivated for security
   
-  // Timestamps
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-  lastUsedAt    DateTime?   @map("last_used_at")
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
   
-  // Relations
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // This creates the relationship between Device and User
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("devices")
 }
 
-// Biometric credentials (WebAuthn)
-model BiometricCredential {
-  id            String      @id @default(cuid())
-  userId        String      @map("user_id")
-  credentialId  String      @unique @map("credential_id") // WebAuthn credential ID
-  publicKey     String      @map("public_key") // WebAuthn public key
-  counter       Int         @default(0) // WebAuthn signature counter
-  deviceType    String?     @map("device_type") // "touch_id", "face_id", etc.
-  isActive      Boolean     @default(true) @map("is_active")
+// Biometric authentication data using WebAuthn standard
+model Biometric {
+  id           String @id @default(cuid())
+  userId       String // Foreign key to User
+  credentialId String @unique // WebAuthn credential ID
+  publicKey    Bytes  // WebAuthn public key for verification
+  counter      Int    @default(0) // WebAuthn signature counter (prevents replay attacks)
+  deviceType   String // touch, face, fingerprint, etc.
+  isActive     Boolean @default(true)
   
-  // Timestamps
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-  lastUsedAt    DateTime?   @map("last_used_at")
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
   
-  // Relations
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relationship to User
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@map("biometric_credentials")
+  @@map("biometrics")
 }
 
-// OTP verification tracking
+// Social login providers like Telegram, Google, etc.
+model SocialLogin {
+  id         String @id @default(cuid())
+  userId     String // Foreign key to User
+  provider   String // telegram, google, apple, etc.
+  providerId String // User ID from the social provider
+  metadata   Json?  // Additional data from the provider (profile info, etc.)
+  
+  createdAt DateTime @default(now())
+  
+  // Relationship to User
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Ensure one account per provider per user
+  @@unique([userId, provider])
+  @@map("social_logins")
+}
+
+// OTP (One-Time Password) verification for phone/email verification
 model OtpVerification {
-  id            String      @id @default(cuid())
-  identifier    String      // Phone number or email
-  code          String      // OTP code (hashed)
-  purpose       OtpPurpose  // LOGIN, SIGNUP, RESET_PASSWORD, etc.
-  isUsed        Boolean     @default(false) @map("is_used")
-  attempts      Int         @default(0)
-  maxAttempts   Int         @default(3) @map("max_attempts")
+  id         String @id @default(cuid())
+  identifier String // Phone number or email address
+  code       String // The actual OTP code (6 digits)
+  purpose    String // LOGIN, SIGNUP, RESET_PASSWORD, VERIFY_PHONE, VERIFY_EMAIL
+  attempts   Int    @default(0) // How many times they've tried to verify
+  maxAttempts Int   @default(5) // Maximum allowed attempts
+  isUsed     Boolean @default(false) // Has this OTP been successfully used?
+  expiresAt  DateTime // When this OTP expires (usually 10 minutes)
+  verifiedAt DateTime? // When it was successfully verified
   
-  // Expiration
-  expiresAt     DateTime    @map("expires_at")
-  
-  // Timestamps
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
+  createdAt DateTime @default(now())
   
   @@map("otp_verifications")
 }
 
-// Security monitoring and logging
+// Security event logging for monitoring, compliance, and debugging
 model SecurityLog {
-  id            String        @id @default(cuid())
-  userId        String?       @map("user_id")
-  eventType     SecurityEvent @map("event_type")
-  description   String?
-  metadata      Json?         // Additional event data
-  ipAddress     String?       @map("ip_address")
-  userAgent     String?       @map("user_agent")
-  deviceId      String?       @map("device_id")
-  riskLevel     RiskLevel     @default(LOW) @map("risk_level")
+  id          String @id @default(cuid())
+  userId      String? // Optional - some events might not be user-specific
+  eventType   String  // LOGIN_SUCCESS, LOGIN_FAILED, ACCOUNT_CREATED, etc.
+  description String? // Human-readable description of what happened
+  metadata    Json?   // Additional structured data about the event
+  ipAddress   String? // Where the event originated from
+  userAgent   String? // Browser/device information
+  deviceId    String? // Which device triggered this event
+  riskLevel   String  @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
   
-  // Timestamps
-  createdAt     DateTime      @default(now()) @map("created_at")
+  createdAt DateTime @default(now())
   
-  // Relations
-  user          User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Optional relationship to User (some events might not have a user)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   
   @@map("security_logs")
 }
 
 // Auto-Verification & Validation (AVV) system logs
+// This tracks our automated security checks
 model AvvLog {
-  id            String      @id @default(cuid())
-  userId        String      @map("user_id")
-  checkType     AvvCheckType @map("check_type")
-  input         String?     // The input being validated (hashed if sensitive)
-  result        AvvResult
-  reason        String?     // Reason for failure if applicable
-  metadata      Json?       // Additional validation data
+  id        String @id @default(cuid())
+  userId    String // Foreign key to User
+  checkType String // PASSCODE_STRENGTH, BIOMETRIC_QUALITY, DEVICE_TRUST, etc.
+  input     String? // What was being checked (may be redacted for security)
+  result    String // PASS, FAIL, WARNING
+  reason    String? // Why it failed or warned
+  metadata  Json?  // Additional data about the check
   
-  // Timestamps
-  createdAt     DateTime    @default(now()) @map("created_at")
+  createdAt DateTime @default(now())
   
-  // Relations
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relationship to User
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("avv_logs")
 }
 
-// SSO sessions for external dApps
+// Single Sign-On sessions for external dApps and applications
 model SsoSession {
-  id            String      @id @default(cuid())
-  userId        String      @map("user_id")
-  osId          String      @map("os_id") // Reference to user's OS-ID
-  dappId        String      @map("dapp_id") // Identifier for the requesting dApp
-  sessionToken  String      @unique @map("session_token")
-  isActive      Boolean     @default(true) @map("is_active")
+  id           String @id @default(cuid())
+  userId       String // Foreign key to User
+  osId         String // OneStep ID for quick lookup
+  dappId       String // External application identifier
+  sessionToken String @unique // Secure session token for the external app
+  isActive     Boolean @default(true)
+  expiresAt    DateTime // When this SSO session expires
   
-  // Expiration
-  expiresAt     DateTime    @map("expires_at")
+  createdAt DateTime @default(now())
   
-  // Timestamps
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
+  // Relationship to User
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("sso_sessions")
 }
 
-// Enums
-enum SocialProvider {
-  TELEGRAM
-  // Future: TWITTER, DISCORD, etc.
+// Backup codes for account recovery when users lose access
+model BackupCode {
+  id     String @id @default(cuid())
+  userId String // Foreign key to User
+  code   String // Hashed backup code (never store plain text)
+  isUsed Boolean @default(false) // Has this code been used?
+  usedAt DateTime? // When it was used
+  
+  createdAt DateTime @default(now())
+  expiresAt DateTime? // Optional expiration date
+  
+  // Relationship to User
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("backup_codes")
 }
 
-enum DeviceType {
-  MOBILE
-  DESKTOP
-  TABLET
-  UNKNOWN
+// API keys for developers integrating with OneStep
+model ApiKey {
+  id          String @id @default(cuid())
+  keyId       String @unique // Public key identifier
+  keyHash     String // Hashed secret key (never store plain text)
+  name        String // User-friendly name for the key
+  permissions Json   // What this key is allowed to access
+  isActive    Boolean @default(true)
+  lastUsedAt  DateTime?
+  
+  // Rate limiting settings
+  rateLimit   Int @default(1000) // Requests per hour
+  usageCount  Int @default(0) // Current usage in the current window
+  
+  createdAt DateTime @default(now())
+  expiresAt DateTime? // Optional expiration date
+  
+  @@map("api_keys")
 }
 
-enum KycStatus {
-  PENDING
-  IN_PROGRESS
-  APPROVED
-  REJECTED
-  EXPIRED
+// Webhook endpoints for real-time notifications to external services
+model WebhookEndpoint {
+  id          String @id @default(cuid())
+  url         String // The webhook URL to send events to
+  events      String[] // Array of event types this endpoint wants
+  secret      String // Secret for webhook signature verification
+  isActive    Boolean @default(true)
+  failureCount Int @default(0) // How many times delivery has failed
+  lastSuccess DateTime? // Last successful delivery
+  lastFailure DateTime? // Last failed delivery
+  
+  createdAt DateTime @default(now())
+  
+  @@map("webhook_endpoints")
 }
 
-enum OtpPurpose {
-  LOGIN
-  SIGNUP
-  RESET_PASSWORD
-  VERIFY_PHONE
-  VERIFY_EMAIL
+// Audit trail for important system changes (compliance requirement)
+model AuditLog {
+  id         String @id @default(cuid())
+  action     String // What action was performed
+  entityType String // What type of entity was affected (User, Device, etc.)
+  entityId   String // ID of the specific entity
+  oldValues  Json?  // What the data looked like before
+  newValues  Json?  // What the data looks like after
+  performedBy String? // Who or what made this change
+  ipAddress  String? // Where the change came from
+  userAgent  String? // What device/browser made the change
+  
+  createdAt DateTime @default(now())
+  
+  @@map("audit_logs")
 }
 
-enum SecurityEvent {
-  LOGIN_SUCCESS
-  LOGIN_FAILED
-  LOGOUT
-  PASSWORD_RESET
-  BIOMETRIC_SETUP
-  BIOMETRIC_AUTH
-  SUSPICIOUS_ACTIVITY
-  DEVICE_REGISTERED
-  DEVICE_REMOVED
-  ACCOUNT_LOCKED
-  ACCOUNT_UNLOCKED
+// System configuration and feature flags
+model SystemConfig {
+  id    String @id @default(cuid())
+  key   String @unique // Configuration key (e.g., "max_devices_per_user")
+  value Json   // The actual configuration value
+  type  String // Data type: STRING, NUMBER, BOOLEAN, JSON
+  description String? // Human-readable explanation of what this does
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("system_configs")
 }
 
-enum RiskLevel {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
+// Rate limiting tracking for production environments
+model RateLimit {
+  id         String @id @default(cuid())
+  identifier String // IP address, user ID, API key, etc.
+  action     String // What action is being rate limited
+  count      Int    @default(1) // How many requests in this window
+  windowStart DateTime // When this rate limit window started
+  windowEnd   DateTime // When this rate limit window ends
+  
+  // Ensure unique tracking per identifier/action/window
+  @@unique([identifier, action, windowStart])
+  @@map("rate_limits")
 }
 
-enum AvvCheckType {
-  PASSCODE_STRENGTH
-  PASSCODE_PERSONAL_DATA
-  BIOMETRIC_QUALITY
-  DEVICE_TRUST
-  BEHAVIORAL_PATTERN
-}
-
-enum AvvResult {
-  PASS
-  FAIL
-  WARNING
+// Notification system for emails, SMS, push notifications, etc.
+model Notification {
+  id       String @id @default(cuid())
+  userId   String? // Optional - some notifications are system-wide
+  type     String  // EMAIL, SMS, PUSH, IN_APP
+  channel  String  // Specific channel like telegram, email, etc.
+  subject  String  // Notification subject/title
+  content  String  // Notification body/content
+  status   String  @default("PENDING") // PENDING, SENT, DELIVERED, FAILED
+  metadata Json?   // Additional notification data
+  
+  sentAt      DateTime? // When the notification was sent
+  deliveredAt DateTime? // When it was confirmed delivered
+  createdAt   DateTime @default(now())
+  
+  @@map("notifications")
 }
