@@ -1,5 +1,5 @@
 // app/(auth)/kyc/components/IdentityVerificationStep.tsx
-'use client'
+"use client";
 
 import { useState } from 'react'
 import { Upload, RefreshCw, ChevronDown, FileText, X } from 'lucide-react'

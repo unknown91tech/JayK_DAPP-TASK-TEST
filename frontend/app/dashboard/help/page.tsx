@@ -1,6 +1,5 @@
 // app/dashboard/help/page.tsx - Completed Help & Support Page
-'use client'
-
+"use client";
 import { useState, useEffect } from 'react'
 import { 
   HelpCircle, 
@@ -728,7 +727,7 @@ export default function HelpSupportPage() {
               <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); handleTicketSubmit(); }}>
                 {/* Subject */}
                 <div>
-                  <Label htmlFor="subject" className="text-sm font-medium text-foreground-primary">Subject</Label>
+                  <div className="text-sm font-medium text-foreground-primary">Subject</div>
                   <Input
                     id="subject"
                     value={supportTicket.subject}
@@ -741,52 +740,52 @@ export default function HelpSupportPage() {
 
                 {/* Category */}
                 <div>
-                  <div htmlFor="category" className="text-sm font-medium text-foreground-primary">Category</div>
+                  <div className="text-sm font-medium text-foreground-primary">Category</div>
                   <div
-                    value={supportTicket.category}
-                    onValueChange={(value) => setSupportTicket(prev => ({ ...prev, category: value }))}
+                    // value={supportTicket.category}
+                    // onValueChange={(value) => setSupportTicket(prev => ({ ...prev, category: value }))}
                   >
                     <div id="category" className="mt-1">
-                      <div placeholder="Select a category" />
+                      <Input placeholder="Select a category" />
                     </div>
                     <div>
-                      <div value="general">General Inquiry</div>
-                      <div value="technical">Technical Issue</div>
-                      <div value="account">Account Problem</div>
-                      <div value="security">Security Concern</div>
-                      <div value="billing">Billing Question</div>
+                      <div >General Inquiry</div>
+                      <div >Technical Issue</div>
+                      <div >Account Problem</div>
+                      <div >Security Concern</div>
+                      <div >Billing Question</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Priority */}
                 <div>
-                  <div htmlFor="priority" className="text-sm font-medium text-foreground-primary">Priority</div>
-                  <Select
-                    value={supportTicket.priority}
-                    onValueChange={(value) => setSupportTicket(prev => ({ ...prev, priority: value as 'low' | 'medium' | 'high' | 'urgent' }))}
+                  <div className="text-sm font-medium text-foreground-primary">Priority</div>
+                  <div
+                    // value={supportTicket.priority}
+                    // onValueChange={(value) => setSupportTicket(prev => ({ ...prev, priority: value as 'low' | 'medium' | 'high' | 'urgent' }))}
                   >
-                    <SelectTrigger id="priority" className="mt-1">
-                      <SelectValue placeholder="Select priority" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <div id="priority" className="mt-1">
+                      <Input placeholder="Select priority" />
+                    </div>
+                    <div>
+                      <div >Low</div>
+                      <div >Medium</div>
+                      <div >High</div>
+                      <div >Urgent</div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Message */}
                 <div>
-                  <Label htmlFor="message" className="text-sm font-medium text-foreground-primary">Message</Label>
-                  <Textarea
+                  <div  className="text-sm font-medium text-foreground-primary">Message</div>
+                  <Input
                     id="message"
                     value={supportTicket.message}
                     onChange={(e) => setSupportTicket(prev => ({ ...prev, message: e.target.value }))}
                     placeholder="Describe your issue in detail"
-                    rows={6}
+                    // rows={6}
                     className={`mt-1 ${formErrors.message ? 'border-status-error' : ''}`}
                   />
                   {formErrors.message && <p className="text-sm text-status-error mt-1">{formErrors.message}</p>}
@@ -794,7 +793,7 @@ export default function HelpSupportPage() {
 
                 {/* Attachments */}
                 <div>
-                  <Label className="text-sm font-medium text-foreground-primary">Attachments (optional)</Label>
+                  <div className="text-sm font-medium text-foreground-primary">Attachments (optional)</div>
                   <div className="mt-1 flex items-center space-x-2">
                     <Input
                       type="file"
@@ -803,7 +802,7 @@ export default function HelpSupportPage() {
                       className="hidden"
                       id="file-upload"
                     />
-                    <Button variant="secondary" as="label" htmlFor="file-upload">
+                    <Button variant="secondary">
                       Upload Files
                     </Button>
                     <span className="text-sm text-foreground-secondary">Max 5 files, 10MB each</span>

@@ -1,5 +1,5 @@
 // app/dashboard/activity/page.tsx
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { 
@@ -198,10 +198,10 @@ export default function ActivityPage() {
       setError(err instanceof Error ? err.message : 'Failed to load activity logs')
       
       // Show fallback data in case of error (for development)
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🚧 Using fallback data for development')
-        setFallbackData()
-      }
+      // if (process.env.NODE_ENV === 'development') {
+      //   console.log('🚧 Using fallback data for development')
+      //   setFallbackData()
+      // }
     } finally {
       setLoading(false)
     }

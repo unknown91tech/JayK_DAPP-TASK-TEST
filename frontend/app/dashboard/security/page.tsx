@@ -1,5 +1,5 @@
 // app/dashboard/security/page.tsx
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { 

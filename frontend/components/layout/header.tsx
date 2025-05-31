@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,11 @@ import {
   Shield
 } from 'lucide-react'
 
-export function Header() {
+interface HeaderProps {
+  onMenuClick: () => void
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
 
@@ -32,6 +36,7 @@ export function Header() {
           variant="ghost" 
           size="icon"
           className="lg:hidden"
+          onClick={onMenuClick}
         >
           <Menu className="w-5 h-5" />
         </Button>

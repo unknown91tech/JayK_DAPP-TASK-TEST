@@ -162,7 +162,7 @@ export async function GET(request: NextRequest) {
 // Function to get ALL security logs (admin/testing mode)
 async function getAllSecurityLogs(filters: {
   eventType?: string
-  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'ALL'
   dateRange?: number
   searchTerm?: string
   page: number
@@ -183,7 +183,7 @@ async function getAllSecurityLogs(filters: {
     }
 
     // Filter by risk level
-    if (riskLevel && riskLevel !== 'all') {
+    if (riskLevel && riskLevel !== 'ALL') {
       whereClause.riskLevel = riskLevel
     }
 

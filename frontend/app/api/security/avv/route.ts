@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { checkType, input, metadata } = validatedData
+    const { checkType, input, metadata }:any = validatedData
 
     // Step 2: Get user information from session (for logging purposes)
     console.log('🔍 Extracting user information for AVV logging...')

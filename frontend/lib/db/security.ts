@@ -10,14 +10,14 @@ export interface SecurityEventData {
   ipAddress?: string
   userAgent?: string
   deviceId?: string
-  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'ALL'
 }
 
 // Interface for fetching security logs with filters
 export interface SecurityLogFilters {
   userId?: string
   eventType?: string
-  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'ALL'
   dateRange?: number // days to look back
   searchTerm?: string
   page?: number
@@ -91,7 +91,7 @@ export async function getSecurityLogs(filters: SecurityLogFilters = {}) {
     }
 
     // Filter by risk level
-    if (riskLevel && riskLevel !== 'all') {
+    if (riskLevel && riskLevel !== 'ALL') {
       whereClause.riskLevel = riskLevel
     }
 

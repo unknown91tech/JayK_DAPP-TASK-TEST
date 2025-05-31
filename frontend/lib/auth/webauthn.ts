@@ -6,37 +6,6 @@ import { randomBytes } from 'crypto'
  * These functions help with WebAuthn data conversion and validation
  */
 
-// Convert ArrayBuffer to base64url (web-safe base64 without padding)
-export function bufferToBase64url(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let str = ''
-  for (let i = 0; i < bytes.length; i++) {
-    str += String.fromCharCode(bytes[i])
-  }
-  return btoa(str)
-    .replace(/\+/g, '-')  // Replace + with -
-    .replace(/\//g, '_')  // Replace / with _
-    .replace(/=+$/, '')   // Remove padding
-}
-
-// Convert base64url string to ArrayBuffer
-export function base64urlToBuffer(base64url: string): ArrayBuffer {
-  // Add padding if needed
-  const padding = '='.repeat((4 - (base64url.length % 4)) % 4)
-  const base64 = (base64url + padding)
-    .replace(/-/g, '+')   // Replace - with +
-    .replace(/_/g, '/')   // Replace _ with /
-  
-  const rawData = atob(base64)
-  const buffer = new ArrayBuffer(rawData.length)
-  const bytes = new Uint8Array(buffer)
-  
-  for (let i = 0; i < rawData.length; i++) {
-    bytes[i] = rawData.charCodeAt(i)
-  }
-  
-  return buffer
-}
 
 // Generate a cryptographically secure random challenge for WebAuthn
 export function generateWebAuthnChallenge(): string {
@@ -451,4 +420,222 @@ export function handleWebAuthnError(error: any): WebAuthnError {
     WebAuthnErrorCodes.AUTHENTICATION_FAILED,
     error
   )
+}
+/**
+ * WebAuthn utility functions for biometric authentication
+ */
+
+export interface BiometricRegistrationOptions {
+  challenge: string
+  userId: string
+  username: string
+  displayName: string
+}
+
+export interface BiometricAuthenticationOptions {
+  challenge: string
+  credentialIds?: string[]
+}
+
+/**
+ * Check if WebAuthn is supported in the current browser
+ */
+export function isWebAuthnSupported(): boolean {
+  return !!(
+    typeof window !== 'undefined' &&
+    window.PublicKeyCredential &&
+    typeof window.PublicKeyCredential === 'function'
+  )
+}
+
+/**
+ * Check if biometric authentication is available
+ */
+export async function isBiometricAvailable() {
+  if (!isWebAuthnSupported()) {
+    return false
+  }
+
+  try {
+    // Check if authenticator is available
+    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+    return available
+  } catch (error) {
+    console.error('Error checking biometric availability:', error)
+    return false
+  }
+}
+
+/**
+ * Get available biometric authentication types
+ */
+export async function getAvailableBiometricTypes(): Promise<string[]> {
+  if (!await isBiometricAvailable()) {
+    return []
+  }
+
+  // Note: WebAuthn doesn't provide a direct way to detect specific biometric types
+  // This is a simplified implementation that returns generic types
+  const types: string[] = []
+  
+  try {
+    // Check for platform authenticator (usually biometric)
+    const platformAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+    if (platformAvailable) {
+      types.push('platform') // Could be fingerprint, face, etc.
+    }
+  } catch (error) {
+    console.error('Error detecting biometric types:', error)
+  }
+
+  return types
+}
+
+/**
+ * Convert base64url string to ArrayBuffer
+ */
+function base64urlToBuffer(base64url: string): ArrayBuffer {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=')
+  const binary = atob(padded)
+  const buffer = new ArrayBuffer(binary.length)
+  const view = new Uint8Array(buffer)
+  
+  for (let i = 0; i < binary.length; i++) {
+    view[i] = binary.charCodeAt(i)
+  }
+  
+  return buffer
+}
+
+/**
+ * Convert ArrayBuffer to base64url string
+ */
+function bufferToBase64url(buffer: ArrayBuffer): string {
+  const binary = String.fromCharCode(...new Uint8Array(buffer))
+  const base64 = btoa(binary)
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+/**
+ * Convert string to ArrayBuffer
+ */
+function stringToBuffer(str: string): ArrayBuffer {
+  const encoder = new TextEncoder()
+  return encoder.encode(str)
+}
+
+/**
+ * Register a new biometric credential
+ */
+export async function registerBiometric(options: BiometricRegistrationOptions): Promise<any> {
+  if (!isWebAuthnSupported()) {
+    throw new Error('WebAuthn is not supported in this browser')
+  }
+
+  const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
+    challenge: base64urlToBuffer(options.challenge),
+    rp: {
+      name: window.location.hostname,
+      id: window.location.hostname,
+    },
+    user: {
+      id: stringToBuffer(options.userId),
+      name: options.username,
+      displayName: options.displayName,
+    },
+    pubKeyCredParams: [
+      {
+        alg: -7, // ES256
+        type: 'public-key',
+      },
+      {
+        alg: -257, // RS256
+        type: 'public-key',
+      },
+    ],
+    authenticatorSelection: {
+      authenticatorAttachment: 'platform',
+      userVerification: 'required',
+      requireResidentKey: false,
+    },
+    timeout: 60000,
+    attestation: 'direct',
+  }
+
+  try {
+    const credential = await navigator.credentials.create({
+      publicKey: publicKeyCredentialCreationOptions,
+    }) as PublicKeyCredential
+
+    if (!credential) {
+      throw new Error('Failed to create credential')
+    }
+
+    const response = credential.response as AuthenticatorAttestationResponse
+
+    return {
+      id: credential.id,
+      rawId: bufferToBase64url(credential.rawId),
+      type: credential.type,
+      response: {
+        attestationObject: bufferToBase64url(response.attestationObject),
+        clientDataJSON: bufferToBase64url(response.clientDataJSON),
+      },
+    }
+  } catch (error) {
+    console.error('Biometric registration failed:', error)
+    throw new Error(
+      error instanceof Error ? error.message : 'Biometric registration failed'
+    )
+  }
+}
+
+/**
+ * Authenticate using biometric credential
+ */
+export async function authenticateBiometric(options: BiometricAuthenticationOptions): Promise<any> {
+  if (!isWebAuthnSupported()) {
+    throw new Error('WebAuthn is not supported in this browser')
+  }
+
+  const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
+    challenge: base64urlToBuffer(options.challenge),
+    allowCredentials: options.credentialIds?.map(id => ({
+      id: base64urlToBuffer(id),
+      type: 'public-key' as const,
+      transports: ['internal'] as AuthenticatorTransport[],
+    })) || [],
+    userVerification: 'required',
+    timeout: 60000,
+  }
+
+  try {
+    const credential = await navigator.credentials.get({
+      publicKey: publicKeyCredentialRequestOptions,
+    }) as PublicKeyCredential
+
+    if (!credential) {
+      throw new Error('Authentication failed')
+    }
+
+    const response = credential.response as AuthenticatorAssertionResponse
+
+    return {
+      id: credential.id,
+      rawId: bufferToBase64url(credential.rawId),
+      type: credential.type,
+      response: {
+        authenticatorData: bufferToBase64url(response.authenticatorData),
+        clientDataJSON: bufferToBase64url(response.clientDataJSON),
+        signature: bufferToBase64url(response.signature),
+        userHandle: response.userHandle ? bufferToBase64url(response.userHandle) : null,
+      },
+    }
+  } catch (error) {
+    console.error('Biometric authentication failed:', error)
+    throw new Error(
+      error instanceof Error ? error.message : 'Biometric authentication failed'
+    )
+  }
 }

@@ -3,9 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
-
-// In-memory store for challenges (in production, use Redis or database)
-const challengesDb: Record<string, { challenge: string, timestamp: number }> = {}
+import { cleanupExpiredChallenges, storeChallenge } from '../challenge-store'
 
 // Request validation schema
 const getChallengeSchema = z.object({
@@ -104,19 +102,10 @@ export async function POST(request: NextRequest) {
     
     // Store the challenge temporarily (expires in 5 minutes)
     const challengeKey = user?.id || userIdentifier
-    challengesDb[challengeKey] = {
-      challenge,
-      timestamp: Date.now()
-    }
+    storeChallenge(challengeKey, challenge)
     
-    // Clean up old challenges (remove entries older than 5 minutes)
-    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000)
-    Object.keys(challengesDb).forEach(key => {
-      if (challengesDb[key].timestamp < fiveMinutesAgo) {
-        delete challengesDb[key]
-        console.log('🧹 Cleaned up expired challenge for:', key)
-      }
-    })
+    // Clean up old challenges
+    cleanupExpiredChallenges(5 * 60 * 1000) // 5 minutes
     
     // Prepare response data
     const responseData: any = {
@@ -259,6 +248,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
-// Export the challenges store for use by the verify endpoint
-export { challengesDb }

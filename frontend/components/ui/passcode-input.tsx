@@ -1,5 +1,5 @@
 // components/ui/passcode-input.tsx
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils/helpers'
@@ -15,6 +15,8 @@ interface PasscodeInputProps {
   error?: boolean
   // Loading state
   loading?: boolean
+  // Disabled state
+  disabled?: boolean
   // Custom className
   className?: string
   // Whether to clear on error
@@ -27,6 +29,7 @@ export function PasscodeInput({
   onChange,
   error = false,
   loading = false,
+  disabled = false,
   className,
   clearOnError = true
 }: PasscodeInputProps) {
@@ -42,7 +45,7 @@ export function PasscodeInput({
 
   // Handle number input from virtual keypad
   const handleNumberInput = (num: string) => {
-    if (loading || passcode.length >= length) return
+    if (loading || disabled || passcode.length >= length) return
 
     const newPasscode = passcode + num
     setPasscode(newPasscode)
@@ -56,7 +59,7 @@ export function PasscodeInput({
 
   // Handle backspace
   const handleBackspace = () => {
-    if (loading) return
+    if (loading || disabled) return
     
     const newPasscode = passcode.slice(0, -1)
     setPasscode(newPasscode)
@@ -80,8 +83,10 @@ export function PasscodeInput({
               : "border-border-primary",
             // Error state
             error && "border-status-error",
+            // Disabled state
+            disabled && "opacity-50",
             // Animation when filling
-            i < passcode.length && "animate-bounce-subtle"
+            i < passcode.length && !disabled && "animate-bounce-subtle"
           )}
         />
       )
@@ -99,7 +104,7 @@ export function PasscodeInput({
   ]
 
   return (
-    <div className={cn("space-y-8", className)}>
+    <div className={cn("space-y-8", disabled && "opacity-50", className)}>
       {/* Passcode dots display */}
       <div className="flex justify-center space-x-4">
         {renderPasscodeDots()}
@@ -120,7 +125,7 @@ export function PasscodeInput({
                   <button
                     key={index}
                     onClick={handleBackspace}
-                    disabled={loading || passcode.length === 0}
+                    disabled={loading || disabled || passcode.length === 0}
                     className={cn(
                       "h-16 rounded-xl flex items-center justify-center transition-all duration-200",
                       "bg-background-tertiary hover:bg-background-primary",
@@ -152,7 +157,7 @@ export function PasscodeInput({
                 <button
                   key={index}
                   onClick={() => handleNumberInput(key)}
-                  disabled={loading}
+                  disabled={loading || disabled}
                   className={cn(
                     "h-16 rounded-xl text-2xl font-semibold transition-all duration-200",
                     "bg-background-tertiary hover:bg-background-primary text-foreground-primary",
@@ -191,6 +196,15 @@ export function PasscodeInput({
             </svg>
             Verifying passcode...
           </div>
+        </div>
+      )}
+
+      {/* Disabled state message */}
+      {disabled && (
+        <div className="text-center">
+          <p className="text-foreground-tertiary text-sm">
+            Please complete previous authentication step first
+          </p>
         </div>
       )}
     </div>

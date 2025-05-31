@@ -1,5 +1,5 @@
 // app/(auth)/kyc/page.tsx
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { ArrowLeft } from 'lucide-react'

@@ -4,6 +4,8 @@
  * Standardized types for all API communications
  */
 
+import { AuthUser, LoginMethod, OtpPurpose, UserPreferences } from "./auth"
+
 // Standard API response wrapper
 export interface ApiResponse<T = any> {
   success: boolean

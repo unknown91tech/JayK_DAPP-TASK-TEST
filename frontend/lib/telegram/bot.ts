@@ -21,9 +21,6 @@ class OneStepBot {
 
   private setupHandlers() {
     // Command handlers
-    this.bot.onText(/\/start/, handleStartCommand)
-    this.bot.onText(/\/auth/, handleAuthCommand)
-    this.bot.onText(/\/verify/, handleVerifyCommand)
     this.bot.onText(/\/help/, this.handleHelp.bind(this))
 
     // Callback query handlers (inline buttons)
@@ -83,7 +80,7 @@ Need help? Visit our help center: https://help.onestep.com
       await this.bot.setWebHook(webhookUrl, {
         secret_token: secretToken,
         allowed_updates: ['message', 'callback_query'],
-        drop_pending_updates: true
+        // drop_pending_updates: true
       })
       
       console.log('✅ Telegram webhook set up successfully')

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       kycStatus: user.kycStatus,
-      submittedAt: user.kycData?.submittedAt,
+      submittedAt: (user.kycData as any)?.submittedAt,
       updatedAt: user.updatedAt
     })
 

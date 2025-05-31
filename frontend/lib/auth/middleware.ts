@@ -87,7 +87,7 @@ export async function verifyJWTToken(token: string): Promise<AuthenticatedUser |
     const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret-key')
     const { payload } = await jwtVerify(token, secret)
     
-    const jwtPayload = payload as JWTPayload
+    const jwtPayload = payload as unknown as JWTPayload
     
     // Ensure required fields exist
     if (!jwtPayload.userId || !jwtPayload.osId) {

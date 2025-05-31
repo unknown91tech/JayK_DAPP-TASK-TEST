@@ -1,5 +1,5 @@
 // app/(auth)/kyc/components/KYCStatusScreen.tsx
-'use client'
+"use client";
 
 import { ArrowLeft, Clock, CheckCircle, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'

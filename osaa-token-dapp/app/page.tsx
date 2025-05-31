@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // app/page.tsx - Production ready with proper TypeScript types
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'

@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -63,7 +63,7 @@ export function SecurityMonitor() {
         </div>
         
         <Button 
-          variant="outline" 
+          variant="secondary" 
           onClick={handleRefresh}
           disabled={refreshing}
         >
@@ -198,7 +198,7 @@ export function SecurityMonitor() {
               
               {events.length > 10 && (
                 <div className="text-center pt-4">
-                  <Button variant="outline" size="sm">
+                  <Button variant="secondary" size="sm">
                     View All Events ({events.length - 10} more)
                   </Button>
                 </div>
@@ -251,7 +251,7 @@ export function SecurityMonitor() {
                 <p className="text-xs text-foreground-tertiary mb-2">
                   Add email or SMS backup for account recovery.
                 </p>
-                <Button size="sm" variant="outline">
+                <Button size="sm" variant="secondary">
                   Set Up Backup
                 </Button>
               </div>
@@ -266,7 +266,7 @@ export function SecurityMonitor() {
                 <p className="text-xs text-foreground-tertiary mb-2">
                   You have {stats.activeDevices}/5 devices registered. Remove unused devices.
                 </p>
-                <Button size="sm" variant="outline">
+                <Button size="sm" variant="secondary">
                   Manage Devices
                 </Button>
               </div>

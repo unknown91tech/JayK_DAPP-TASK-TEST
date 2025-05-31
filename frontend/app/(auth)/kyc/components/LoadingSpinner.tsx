@@ -1,5 +1,5 @@
 // app/(auth)/kyc/components/LoadingSpinner.tsx
-'use client'
+"use client";
 
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'

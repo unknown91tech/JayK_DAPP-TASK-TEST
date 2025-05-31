@@ -1,5 +1,5 @@
 // components/MetaMaskNotice.tsx
-'use client'
+"use client";
 
 interface MetaMaskNoticeProps {
   isMetaMaskAvailable: boolean

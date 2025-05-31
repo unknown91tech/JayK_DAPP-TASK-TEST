@@ -1,5 +1,4 @@
-'use client'
-
+"use client";
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
@@ -228,9 +227,6 @@ export default function KycPage() {
             <p className="text-sm text-foreground-secondary mb-3">
               {kycStatus.notes || 'Your submission could not be verified. Please review your information and try again.'}
             </p>
-            <Button size="sm" onClick={() => setShowForm(true)}>
-              Resubmit Documents
-            </Button>
           </div>
         )}
       </div>

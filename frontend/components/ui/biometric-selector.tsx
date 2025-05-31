@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useState } from 'react'
 import { Fingerprint, Scan, Smartphone } from 'lucide-react'
@@ -19,7 +19,7 @@ interface BiometricSelectorProps {
   // Loading state
   loading?: boolean
   // Error message
-  error?: string
+  error?: any
   // Custom className
   className?: string
 }

@@ -1,5 +1,5 @@
 // components/DisconnectButton.tsx
-'use client'
+"use client";
 
 import { useState } from 'react'
 

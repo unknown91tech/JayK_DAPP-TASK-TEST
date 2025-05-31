@@ -1,5 +1,5 @@
 // app/dashboard/layout.tsx
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
@@ -72,7 +72,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       
       if (response.ok) {
         const data = await response.json()
-        setUser(prev => ({ ...prev, ...data.profile }))
+        setUser((prev: any) => ({ ...prev, ...data.profile }))
       }
     } catch (error) {
       console.error('Failed to fetch user profile:', error)

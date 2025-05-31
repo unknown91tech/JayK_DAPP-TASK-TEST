@@ -1,5 +1,5 @@
 // hooks/use-device-detection.ts
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 
@@ -79,7 +79,7 @@ export function useDeviceDetection() {
           new Date().getTimezoneOffset(),
           canvas.toDataURL(),
           navigator.hardwareConcurrency || 'unknown',
-          navigator.deviceMemory || 'unknown'
+          'unknown'
         ].join('|')
 
         // Simple hash function for fingerprint

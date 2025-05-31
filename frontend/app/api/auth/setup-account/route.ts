@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { username, dateOfBirth, phoneNumber, referralCode } = validatedData
+    const { username, dateOfBirth, phoneNumber, referralCode }:any = validatedData
 
     // Additional username validation (custom business logic)
     const usernameValidation = validateUsername(username)
@@ -242,13 +242,13 @@ export async function POST(request: NextRequest) {
     } catch (dbError) {
       console.error('❌ Database error during user creation:', dbError)
       
-      // Check if it's a unique constraint violation
-      if (dbError.code === 'P2002') {
-        return NextResponse.json(
-          { error: 'An account with this information already exists.' },
-          { status: 409 }
-        )
-      }
+      // // Check if it's a unique constraint violation
+      // if (dbError.code === 'P2002') {
+      //   return NextResponse.json(
+      //     { error: 'An account with this information already exists.' },
+      //     { status: 409 }
+      //   )
+      // }
       
       throw dbError // Re-throw to be caught by outer catch
     }

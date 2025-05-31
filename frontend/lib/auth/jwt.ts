@@ -66,7 +66,7 @@ export async function verifySessionToken(token: string): Promise<JWTPayload> {
       audience: 'onestep-users'
     })
 
-    return payload as JWTPayload
+    return payload as unknown as JWTPayload
   } catch (error) {
     // Handle different JWT errors
     if (error instanceof Error) {

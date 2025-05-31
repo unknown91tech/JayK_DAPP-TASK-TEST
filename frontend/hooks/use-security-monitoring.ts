@@ -1,6 +1,6 @@
 
 // hooks/use-security-monitoring.ts
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { useAuth } from './use-auth'

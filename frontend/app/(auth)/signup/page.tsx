@@ -1,5 +1,5 @@
 // app/(auth)/signup/page.tsx - Fixed signup with proper data handling
-'use client'
+"use client";
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'

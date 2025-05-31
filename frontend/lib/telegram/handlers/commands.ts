@@ -12,12 +12,26 @@ export async function handleStartCommand(msg: TelegramBot.Message, bot: Telegram
 
   try {
     // Check if user already exists in our database
-    let existingUser = await prisma.socialLogin.findUnique({
+    // Option A: If you have a compound unique constraint, use this:
+    // let existingUser = await prisma.socialLogin.findUnique({
+    //   where: {
+    //     provider_providerId: {
+    //       provider: 'TELEGRAM',
+    //       providerId: user.id.toString()
+    //     }
+    //   },
+    //   include: {
+    //     user: true
+    //   }
+    // })
+
+    // Option B: Use findFirst as a workaround
+    let existingUser = await prisma.socialLogin.findFirst({
       where: {
-        provider_providerId: {
-          provider: 'TELEGRAM',
-          providerId: user.id.toString()
-        }
+        AND: [
+          { provider: 'TELEGRAM' },
+          { providerId: user.id.toString() }
+        ]
       },
       include: {
         user: true
@@ -85,12 +99,26 @@ export async function handleVerifyCommand(msg: TelegramBot.Message, bot: Telegra
 
   try {
     // Check user's verification status
-    const socialLogin = await prisma.socialLogin.findUnique({
+    // Option A: If you have a compound unique constraint, use this:
+    // const socialLogin = await prisma.socialLogin.findUnique({
+    //   where: {
+    //     provider_providerId: {
+    //       provider: 'TELEGRAM',
+    //       providerId: user.id.toString()
+    //     }
+    //   },
+    //   include: {
+    //     user: true
+    //   }
+    // })
+
+    // Option B: Use findFirst as a workaround
+    const socialLogin = await prisma.socialLogin.findFirst({
       where: {
-        provider_providerId: {
-          provider: 'TELEGRAM',
-          providerId: user.id.toString()
-        }
+        AND: [
+          { provider: 'TELEGRAM' },
+          { providerId: user.id.toString() }
+        ]
       },
       include: {
         user: true

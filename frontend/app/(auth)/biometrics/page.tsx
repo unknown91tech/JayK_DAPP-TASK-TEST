@@ -1,5 +1,5 @@
 // app/(auth)/biometrics/page.tsx
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'

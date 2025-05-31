@@ -21,7 +21,6 @@ const publicRoutes = [
   '/api/auth/telegram/webhook',
   '/api/auth/resend-otp',
   '/api/auth/webauthn/get-challenge',
-  '/api/auth/webauthn/verify-assertion',
   '/api/sso/validate',
   '/api/telegram/setup',
   '/api/telegram/webhook',
@@ -38,7 +37,6 @@ const publicRoutes = [
   '/api/user/biometrics',
   '/kyc',
   '/api/auth/webauthn/register',
-  '/api/auth/telegram/send-login-opt',
   
 ]
 

@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -141,7 +141,7 @@ export function SignupForm() {
             placeholder="+1 (555) 123-4567"
             value={phoneNumber}
             onChange={(e) => setPhoneNumber(e.target.value)}
-            error={error}
+            // error={error}
           />
           
           <Button

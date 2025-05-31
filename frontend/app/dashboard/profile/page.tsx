@@ -1,5 +1,5 @@
 // app/dashboard/profile/page.tsx
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'

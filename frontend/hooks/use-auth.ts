@@ -1,5 +1,5 @@
 // hooks/use-auth.ts
-'use client'
+"use client";
 
 import { useState, useEffect, useContext, createContext, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
@@ -12,6 +12,7 @@ import {
   autoRefreshSession,
   setupSessionSync
 } from '@/lib/auth/session'
+import React from 'react'
 
 // Types for our auth context
 interface User {
@@ -25,14 +26,10 @@ interface User {
 }
 
 interface AuthContextType {
-  // Current user data
   user: User | null
-  // Loading states
   loading: boolean
-  // Authentication status
   isAuthenticated: boolean
   isSetupComplete: boolean
-  // Actions
   login: (token: string, userData: User) => void
   logout: () => Promise<void>
   updateUser: (updates: Partial<User>) => void
@@ -40,12 +37,8 @@ interface AuthContextType {
 }
 
 // Create the auth context
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | null>(null)
 
-/**
- * Auth Provider Component
- * Wraps the app and provides authentication state to all components
- */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -85,7 +78,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
       } else {
         setUser(null)
-        // Redirect to login if session was cleared
         if (window.location.pathname.startsWith('/dashboard')) {
           router.push('/login')
         }
@@ -96,7 +88,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refreshInterval = setInterval(async () => {
       const success = await autoRefreshSession()
       if (!success && user) {
-        // Session couldn't be refreshed, log out user
         logout()
       }
     }, 25 * 60 * 1000)
@@ -106,16 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [router, user])
 
-  // Login function
   const login = (token: string, userData: User) => {
     setUser(userData)
-    // Session storage is handled by the API response setting cookies
   }
 
-  // Logout function
   const logout = async () => {
     try {
-      // Call logout API to invalidate server-side session
       await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
@@ -123,29 +110,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Logout API call failed:', error)
     } finally {
-      // Clear local session data regardless of API success
       clearSession()
       setUser(null)
       router.push('/login')
     }
   }
 
-  // Update user data
   const updateUser = (updates: Partial<User>) => {
     if (user) {
       const updatedUser = { ...user, ...updates }
       setUser(updatedUser)
-      // Update session storage
-      // updateSession(updatedUser) // This function would need to be imported
     }
   }
 
-  // Refresh session
   const refreshSession = async (): Promise<boolean> => {
     return autoRefreshSession()
   }
 
-  const contextValue: AuthContextType = {
+  const value: AuthContextType = {
     user,
     loading,
     isAuthenticated: user !== null && user.isVerified,
@@ -156,29 +138,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession
   }
 
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return React.createElement(AuthContext.Provider, { value }, children)
 }
 
-/**
- * useAuth Hook
- * Provides access to authentication state and actions
- */
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext)
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
 }
 
-/**
- * Hook to require authentication
- * Redirects to login if user is not authenticated
- */
 export function useRequireAuth() {
   const { isAuthenticated, loading } = useAuth()
   const router = useRouter()
@@ -192,10 +162,6 @@ export function useRequireAuth() {
   return { isAuthenticated, loading }
 }
 
-/**
- * Hook to require setup completion
- * Redirects to setup flow if user hasn't completed setup
- */
 export function useRequireSetup() {
   const { isSetupComplete, isAuthenticated, loading } = useAuth()
   const router = useRouter()

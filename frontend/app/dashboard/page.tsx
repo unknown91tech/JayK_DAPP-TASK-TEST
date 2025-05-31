@@ -1,5 +1,5 @@
 // app/dashboard/page.tsx
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { 

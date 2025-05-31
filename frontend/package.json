@@ -13,8 +13,10 @@
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.4",
     "@hookform/resolvers": "^3.3.2",
     "@prisma/client": "^6.8.2",
+    "@radix-ui/react-slot": "^1.2.3",
     "@sendgrid/mail": "^8.1.5",
     "@simplewebauthn/browser": "^9.0.0",
     "@simplewebauthn/server": "^9.0.3",

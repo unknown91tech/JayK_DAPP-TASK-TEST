@@ -106,12 +106,7 @@ export function Footer() {
         {/* Bottom bar */}
         <div className="flex flex-col md:flex-row justify-between items-center mt-8 pt-8 border-t border-border-primary">
           <div className="text-sm text-foreground-tertiary">
-            © 2024 OneStep Authentication. All rights reserved.
-          </div>
-          <div className="flex space-x-6 text-sm mt-4 md:mt-0">
-            <span className="text-foreground-tertiary">
-              Made with ❤️ for a secure future
-            </span>
+            © 2025 OneStep Authentication. All rights reserved.
           </div>
         </div>
       </div>

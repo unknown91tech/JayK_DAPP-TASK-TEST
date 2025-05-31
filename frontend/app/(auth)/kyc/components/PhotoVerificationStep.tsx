@@ -1,5 +1,5 @@
 // app/(auth)/kyc/components/PhotoVerificationStep.tsx
-'use client'
+"use client";
 
 import { useState } from 'react'
 import { Camera, RefreshCw, FileText, X, AlertTriangle } from 'lucide-react'

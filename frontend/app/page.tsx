@@ -1,4 +1,5 @@
 // app/page.tsx
+"use client";
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Shield, Fingerprint, Users } from 'lucide-react'

@@ -1,5 +1,5 @@
 // components/ui/otp-input.tsx
-'use client'
+"use client";
 
 import { useRef, useEffect, useState, KeyboardEvent, ClipboardEvent } from 'react'
 import { cn } from '@/lib/utils/helpers'
@@ -136,7 +136,7 @@ export function OtpInput({
       {otp.map((digit, index) => (
         <input
           key={index}
-          ref={el => (inputRefs.current[index] = el)}
+          ref={(el):any => (inputRefs.current[index] = el)}
           type="text"
           inputMode="numeric"
           pattern="\d*"

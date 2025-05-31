@@ -30,24 +30,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate the passcode format
-    let validatedData
-    try {
-      validatedData = createPasscodeSchema.parse(body)
-      console.log('✅ Passcode format validation passed')
-    } catch (validationError) {
-      console.error('❌ Passcode validation error:', validationError)
-      if (validationError instanceof z.ZodError) {
-        return NextResponse.json(
-          { 
-            error: 'Invalid passcode format', 
-            details: validationError.errors.map(err => err.message)
-          },
-          { status: 400 }
-        )
-      }
+    const validationResult = createPasscodeSchema.safeParse(body)
+    if (!validationResult.success) {
+      console.error('❌ Passcode validation error:', validationResult.error)
+      return NextResponse.json(
+        { 
+          error: 'Invalid passcode format', 
+          details: validationResult.error.errors.map(err => err.message)
+        },
+        { status: 400 }
+      )
     }
 
-    const { passcode } = validatedData
+    const { passcode } = validationResult.data
+    console.log('✅ Passcode format validation passed')
 
     // Step 2: Get user information from the session cookie
     console.log('🔍 Extracting user information from session...')

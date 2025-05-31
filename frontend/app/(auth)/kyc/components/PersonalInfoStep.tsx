@@ -1,5 +1,5 @@
 // app/(auth)/kyc/components/PersonalInfoStep.tsx
-'use client'
+"use client";
 
 import { useState } from 'react'
 import { Info, RefreshCw, ChevronDown } from 'lucide-react'

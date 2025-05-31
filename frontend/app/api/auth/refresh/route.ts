@@ -5,8 +5,8 @@ import { logSecurityEvent } from '@/lib/db/prisma'
 export async function POST(request: NextRequest) {
   try {
     // Extract current session token
-    const authHeader = request.headers.get('authorization')
-    const cookieHeader = request.headers.get('cookie')
+    const authHeader:any = request.headers.get('authorization')
+    const cookieHeader:any = request.headers.get('cookie')
     const currentToken = extractToken(authHeader, cookieHeader)
     
     if (!currentToken) {

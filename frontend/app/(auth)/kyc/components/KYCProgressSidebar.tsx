@@ -1,5 +1,5 @@
 // app/(auth)/kyc/components/KYCProgressSidebar.tsx
-'use client'
+"use client";
 
 import { CheckCircle } from 'lucide-react'
 

@@ -1,5 +1,5 @@
 // components/ui/social-login-button.tsx
-'use client'
+"use client";
 
 import { useState } from 'react'
 import { MessageSquare, Smartphone, Chrome, Github, Twitter, Hash } from 'lucide-react'
@@ -97,7 +97,12 @@ export function SocialLoginButton({
     lg: 'w-6 h-6'
   }
 
-  const handleClick = async () => {
+  const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent default behavior and event bubbling
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Early return if button should not be interactive
     if (disabled || loading || isLoading) return
 
     setIsLoading(true)
@@ -115,6 +120,7 @@ export function SocialLoginButton({
 
   return (
     <button
+      type="button"
       onClick={handleClick}
       disabled={disabled || isButtonLoading}
       className={cn(
@@ -360,32 +366,3 @@ export function EnhancedSocialLogin({
     </div>
   )
 }
-
-// Usage examples in comments:
-/*
-// Basic usage
-<SocialLoginButton 
-  provider="telegram" 
-  onLogin={handleLogin}
-  size="lg"
-  showName={true}
-/>
-
-// Group of providers
-<SocialLoginGroup
-  providers={['telegram', 'google', 'github']}
-  onLogin={handleLogin}
-  title="Choose your login method"
-  showNames={true}
-  orientation="vertical"
-/>
-
-// Enhanced social login with primary/secondary providers
-<EnhancedSocialLogin
-  primaryProvider="telegram"
-  secondaryProviders={['google', 'github']}
-  onLogin={handleLogin}
-  title="Welcome back!"
-  showDivider={true}
-/>
-*/
