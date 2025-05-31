@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import IpAddressDisplay from '@/components/ui/IpAddressDisplay'
 
 interface Device {
   id: string
@@ -37,6 +38,7 @@ export default function DevicesPage() {
   const [loading, setLoading] = useState(true)
   const [showAddDevice, setShowAddDevice] = useState(false)
   const [newDeviceName, setNewDeviceName] = useState('')
+  const [newDeviceIp, setNewDeviceIp] = useState('') // State to store IP address
   const [addingDevice, setAddingDevice] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
@@ -66,7 +68,6 @@ export default function DevicesPage() {
   }
 
   const detectCurrentDevice = () => {
-    // Simple device detection based on user agent
     const userAgent = navigator.userAgent.toLowerCase()
     let deviceName = 'Unknown Device'
     
@@ -97,6 +98,11 @@ export default function DevicesPage() {
       return
     }
 
+    if (!newDeviceIp || newDeviceIp === 'unknown') {
+      setMessage({ type: 'error', text: 'Cannot register device: IP address unavailable' })
+      return
+    }
+
     setAddingDevice(true)
     setMessage(null)
 
@@ -104,7 +110,10 @@ export default function DevicesPage() {
       const response = await fetch('/api/user/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceName: newDeviceName.trim() }),
+        body: JSON.stringify({ 
+          deviceName: newDeviceName.trim(),
+          ipAddress: newDeviceIp // Include IP address in the payload
+        }),
         credentials: 'include'
       })
 
@@ -113,6 +122,7 @@ export default function DevicesPage() {
         setMessage({ type: 'success', text: 'Device registered successfully!' })
         setShowAddDevice(false)
         setNewDeviceName('')
+        setNewDeviceIp('') // Reset IP state
         await fetchDevices() // Refresh the list
       } else {
         const error = await response.json()
@@ -277,7 +287,7 @@ export default function DevicesPage() {
           <h3 className="text-lg font-semibold text-foreground-primary mb-4">Register New Device</h3>
           
           <div className="space-y-4">
-            <Input
+            <Input 
               label="DEVICE NAME"
               placeholder="e.g., iPhone 15, MacBook Pro, Work Laptop"
               value={newDeviceName}
@@ -285,12 +295,19 @@ export default function DevicesPage() {
               startIcon={<Smartphone className="w-4 h-4" />}
             />
             
+            {/* Display IP Address */}
+            <div>
+              <label className="">IP Address</label>
+              <IpAddressDisplay onIpChange={setNewDeviceIp} /> {/* Pass callback to update IP state */}
+            </div>
+            
             <div className="flex items-center justify-end space-x-4">
               <Button
                 variant="secondary"
                 onClick={() => {
                   setShowAddDevice(false)
                   setNewDeviceName('')
+                  setNewDeviceIp('')
                   setMessage(null)
                 }}
                 disabled={addingDevice}
@@ -301,7 +318,7 @@ export default function DevicesPage() {
               <Button
                 onClick={addDevice}
                 loading={addingDevice}
-                disabled={!newDeviceName.trim()}
+                disabled={!newDeviceName.trim() || !newDeviceIp || newDeviceIp === 'unknown'}
               >
                 Register Device
               </Button>

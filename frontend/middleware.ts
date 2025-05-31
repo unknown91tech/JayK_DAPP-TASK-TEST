@@ -36,6 +36,7 @@ const publicRoutes = [
   '/api/user/activity',
   '/api/user/biometrics',
   '/kyc',
+  '/api/auth/webauthn/register',
   
 ]
 

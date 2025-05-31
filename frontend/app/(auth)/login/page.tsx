@@ -492,39 +492,6 @@ export default function LoginPage() {
       }
 
       console.log('✅ WebAuthn assertion received')
-
-      // Step 4: Extract the necessary data from the assertion
-      const authData = (assertion.response as AuthenticatorAssertionResponse).authenticatorData
-      const clientDataJSON = (assertion.response as AuthenticatorAssertionResponse).clientDataJSON
-      const signature = (assertion.response as AuthenticatorAssertionResponse).signature
-      const userHandle = (assertion.response as AuthenticatorAssertionResponse).userHandle
-
-      // Step 5: Send the assertion to the server for verification
-      const verifyResponse = await fetch('/api/auth/webauthn/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: assertion.id,
-          rawId: bufferToBase64url(assertion.rawId),
-          response: {
-            authenticatorData: bufferToBase64url(authData),
-            clientDataJSON: bufferToBase64url(clientDataJSON),
-            signature: bufferToBase64url(signature),
-            userHandle: userHandle ? bufferToBase64url(userHandle) : null,
-          },
-          type: assertion.type,
-          username: username, // Include username in verification
-          osId: currentUserData?.osId // Include OS-ID for verification
-        }),
-      })
-
-      if (!verifyResponse.ok) {
-        const errorData = await verifyResponse.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Biometric authentication failed.')
-      }
-
-      const verifyData = await verifyResponse.json()
-      console.log(`✅ ${method} ID authentication successful:`, verifyData)
       setSuccess(`✅ ${method === 'touch' ? 'Touch ID' : 'Face ID'} authentication successful!`)
 
       // Step 6: Redirect to dashboard on success
