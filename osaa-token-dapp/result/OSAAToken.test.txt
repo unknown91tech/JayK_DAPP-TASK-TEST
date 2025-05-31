@@ -1,0 +1,34 @@
+D:\uniquecrypto\test6-day6\osaa-token-dapp (master -> origin)
+λ npx hardhat test test/OSAAToken.test.js
+
+
+  OSAAToken Contract
+    � Deployment
+      √ Should set correct name and symbol
+      √ Should assign total supply to owner
+      √ Should set owner as authorized minter
+    � Minting Functions
+      √ Should mint tokens successfully
+      √ Should fail when non-authorized user tries to mint
+      √ Should emit TokensMinted event
+    � Transfer Functions
+      √ Should transfer tokens between accounts
+      √ Should fail if sender has insufficient balance
+      √ Should fail transfer to zero address
+    � Balance Checking
+      √ Should return correct balance
+      √ Should return zero for new addresses
+      √ Should fail for zero address
+    � Access Control
+      √ Should allow owner to add authorized minter
+      √ Should allow authorized minter to mint
+      √ Should allow owner to remove authorized minter
+    � Token Information
+      √ Should return correct token info
+    ⚠️ Edge Cases
+      √ Should handle zero amount transfers
+      √ Should handle zero amount minting
+      √ Should respect max supply limit
+
+
+  19 passing (4s)
