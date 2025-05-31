@@ -31,7 +31,16 @@ class TelegramBot {
   async sendOTP(chatId: number, otpCode: string, firstName: string): Promise<boolean> {
     const message: TelegramBotMessage = {
       chat_id: chatId,
-      text: `🔐 <b>OneStep Authentication</b>\n\nHi ${firstName}!\n\nYour verification code is: <code>${otpCode}</code>\n\n⏰ This code expires in 10 minutes.\n🔒 Keep this code secure and don't share it with anyone.\n\n✨ Welcome to OneStep!`,
+      text: `🔐 OneStep Authentication
+
+Hi there! 👋
+
+Your verification code is: <code>${otpCode}</code>
+
+⏰ This code expires in 10 minutes
+🔒 Keep this code secure and don't share it
+
+✨ Welcome to OneStep Authentication!`,
       parse_mode: 'HTML'
     }
 
