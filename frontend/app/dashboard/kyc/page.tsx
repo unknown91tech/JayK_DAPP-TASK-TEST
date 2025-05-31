@@ -1,20 +1,12 @@
-// app/dashboard/kyc/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
-  FileText, 
-  Upload, 
+  FileText,
   CheckCircle, 
   Clock, 
-  AlertTriangle, 
-  User, 
-  MapPin, 
-  Briefcase, 
-  CreditCard,
-  Camera,
-  FileImage,
-  X,
+  AlertTriangle,
   Eye
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -42,28 +34,9 @@ interface KycStatus {
 }
 
 export default function KycPage() {
+  const router = useRouter()
   const [kycStatus, setKycStatus] = useState<KycStatus>({ status: 'NOT_STARTED' })
-  const [kycData, setKycData] = useState<KycData>({
-    fullName: '',
-    middleName: '',
-    nationality: '',
-    occupation: '',
-    streetAddress: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: '',
-    documentType: 'passport',
-    documentNumber: ''
-  })
-  const [files, setFiles] = useState<{
-    frontId?: File
-    backId?: File
-    selfie?: File
-  }>({})
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [showForm, setShowForm] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   useEffect(() => {
@@ -84,91 +57,6 @@ export default function KycPage() {
       console.error('Failed to fetch KYC status:', error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleInputChange = (field: keyof KycData, value: string) => {
-    setKycData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleFileUpload = (type: 'frontId' | 'backId' | 'selfie', file: File) => {
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-      setMessage({ type: 'error', text: 'File size must be less than 5MB' })
-      return
-    }
-
-    if (!file.type.startsWith('image/')) {
-      setMessage({ type: 'error', text: 'Please upload an image file' })
-      return
-    }
-
-    setFiles(prev => ({ ...prev, [type]: file }))
-    setMessage(null)
-  }
-
-  const removeFile = (type: 'frontId' | 'backId' | 'selfie') => {
-    setFiles(prev => {
-      const newFiles = { ...prev }
-      delete newFiles[type]
-      return newFiles
-    })
-  }
-
-  const submitKyc = async () => {
-    // Validate required fields
-    const requiredFields = ['fullName', 'nationality', 'occupation', 'streetAddress', 'city', 'country', 'documentNumber']
-    const missingFields = requiredFields.filter(field => !kycData[field as keyof KycData])
-    
-    if (missingFields.length > 0) {
-      setMessage({ type: 'error', text: 'Please fill in all required fields' })
-      return
-    }
-
-    if (!files.frontId || !files.selfie) {
-      setMessage({ type: 'error', text: 'Please upload required documents' })
-      return
-    }
-
-    if (kycData.documentType === 'nationalId' && !files.backId) {
-      setMessage({ type: 'error', text: 'Please upload both sides of your national ID' })
-      return
-    }
-
-    setSubmitting(true)
-    setMessage(null)
-
-    try {
-      const formData = new FormData()
-      
-      // Add KYC data
-      Object.entries(kycData).forEach(([key, value]) => {
-        formData.append(key, value)
-      })
-      
-      // Add files
-      if (files.frontId) formData.append('frontId', files.frontId)
-      if (files.backId) formData.append('backId', files.backId)
-      if (files.selfie) formData.append('selfie', files.selfie)
-
-      const response = await fetch('/api/kyc/submit', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include'
-      })
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'KYC information submitted successfully!' })
-        setShowForm(false)
-        await fetchKycStatus() // Refresh status
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to submit KYC information' })
-      }
-    } catch (error) {
-      console.error('Failed to submit KYC:', error)
-      setMessage({ type: 'error', text: 'Failed to submit KYC information. Please try again.' })
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -239,12 +127,12 @@ export default function KycPage() {
           <p className="text-foreground-secondary">Complete your identity verification to unlock all features</p>
         </div>
         
-        {kycStatus.status === 'NOT_STARTED' && (
-          <Button onClick={() => setShowForm(true)} className="flex items-center space-x-2">
-            <FileText className="w-4 h-4" />
-            <span>Start KYC Process</span>
-          </Button>
-        )}
+        <div className="flex space-x-4">
+          <Button onClick={() => router.push('/kyc')} className="flex items-center space-x-2">
+              <FileText className="w-4 h-4" />
+              <span>Start KYC Process</span>
+            </Button>
+        </div>
       </div>
 
       {/* Message Display */}
@@ -346,296 +234,6 @@ export default function KycPage() {
           </div>
         )}
       </div>
-
-      {/* KYC Form */}
-      {showForm && (
-        <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-foreground-primary">Identity Verification</h3>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => setShowForm(false)}
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <div className="space-y-8">
-            {/* Personal Information */}
-            <div>
-              <h4 className="text-md font-semibold text-foreground-primary mb-4">Personal Information</h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input
-                  label="FULL NAME *"
-                  placeholder="Enter your full legal name"
-                  value={kycData.fullName}
-                  onChange={(e) => handleInputChange('fullName', e.target.value)}
-                  startIcon={<User className="w-4 h-4" />}
-                />
-                
-                <Input
-                  label="MIDDLE NAME"
-                  placeholder="Enter your middle name (optional)"
-                  value={kycData.middleName}
-                  onChange={(e) => handleInputChange('middleName', e.target.value)}
-                  startIcon={<User className="w-4 h-4" />}
-                />
-                
-                <Input
-                  label="NATIONALITY *"
-                  placeholder="Enter your nationality"
-                  value={kycData.nationality}
-                  onChange={(e) => handleInputChange('nationality', e.target.value)}
-                  startIcon={<MapPin className="w-4 h-4" />}
-                />
-                
-                <Input
-                  label="OCCUPATION *"
-                  placeholder="Enter your occupation"
-                  value={kycData.occupation}
-                  onChange={(e) => handleInputChange('occupation', e.target.value)}
-                  startIcon={<Briefcase className="w-4 h-4" />}
-                />
-              </div>
-            </div>
-
-            {/* Address Information */}
-            <div>
-              <h4 className="text-md font-semibold text-foreground-primary mb-4">Address Information</h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2">
-                  <Input
-                    label="STREET ADDRESS *"
-                    placeholder="Enter your street address"
-                    value={kycData.streetAddress}
-                    onChange={(e) => handleInputChange('streetAddress', e.target.value)}
-                    startIcon={<MapPin className="w-4 h-4" />}
-                  />
-                </div>
-                
-                <Input
-                  label="CITY *"
-                  placeholder="Enter your city"
-                  value={kycData.city}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  startIcon={<MapPin className="w-4 h-4" />}
-                />
-                
-                <Input
-                  label="STATE/PROVINCE"
-                  placeholder="Enter your state or province"
-                  value={kycData.state}
-                  onChange={(e) => handleInputChange('state', e.target.value)}
-                  startIcon={<MapPin className="w-4 h-4" />}
-                />
-                
-                <Input
-                  label="POSTAL CODE"
-                  placeholder="Enter your postal code"
-                  value={kycData.postalCode}
-                  onChange={(e) => handleInputChange('postalCode', e.target.value)}
-                  startIcon={<MapPin className="w-4 h-4" />}
-                />
-                
-                <Input
-                  label="COUNTRY *"
-                  placeholder="Enter your country"
-                  value={kycData.country}
-                  onChange={(e) => handleInputChange('country', e.target.value)}
-                  startIcon={<MapPin className="w-4 h-4" />}
-                />
-              </div>
-            </div>
-
-            {/* Document Information */}
-            <div>
-              <h4 className="text-md font-semibold text-foreground-primary mb-4">Identity Document</h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-foreground-secondary mb-2">
-                    DOCUMENT TYPE *
-                  </label>
-                  <select
-                    value={kycData.documentType}
-                    onChange={(e) => handleInputChange('documentType', e.target.value)}
-                    className="w-full px-4 py-3 bg-background-tertiary border border-border-primary rounded-xl text-foreground-primary focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent"
-                  >
-                    <option value="passport">Passport</option>
-                    <option value="nationalId">National ID</option>
-                    <option value="drivingLicense">Driving License</option>
-                  </select>
-                </div>
-                
-                <Input
-                  label="DOCUMENT NUMBER *"
-                  placeholder="Enter your document number"
-                  value={kycData.documentNumber}
-                  onChange={(e) => handleInputChange('documentNumber', e.target.value)}
-                  startIcon={<CreditCard className="w-4 h-4" />}
-                />
-              </div>
-            </div>
-
-            {/* Document Upload */}
-            <div>
-              <h4 className="text-md font-semibold text-foreground-primary mb-4">Document Upload</h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Front ID */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground-secondary mb-2">
-                    FRONT OF ID *
-                  </label>
-                  {files.frontId ? (
-                    <div className="relative bg-background-tertiary border border-border-primary rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <FileImage className="w-8 h-8 text-accent-primary" />
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-foreground-primary truncate">
-                            {files.frontId.name}
-                          </div>
-                          <div className="text-xs text-foreground-tertiary">
-                            {(files.frontId.size / 1024 / 1024).toFixed(2)} MB
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => removeFile('frontId')}
-                          className="p-1 hover:bg-background-primary rounded transition-colors"
-                        >
-                          <X className="w-4 h-4 text-foreground-secondary" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <label className="block">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => e.target.files?.[0] && handleFileUpload('frontId', e.target.files[0])}
-                        className="hidden"
-                      />
-                      <div className="border-2 border-dashed border-border-primary rounded-xl p-6 text-center hover:border-accent-primary transition-colors cursor-pointer">
-                        <Upload className="w-8 h-8 text-foreground-tertiary mx-auto mb-2" />
-                        <div className="text-sm font-medium text-foreground-primary">Upload Front</div>
-                        <div className="text-xs text-foreground-tertiary">PNG, JPG up to 5MB</div>
-                      </div>
-                    </label>
-                  )}
-                </div>
-
-                {/* Back ID (only for National ID) */}
-                {kycData.documentType === 'nationalId' && (
-                  <div>
-                    <label className="block text-sm font-medium text-foreground-secondary mb-2">
-                      BACK OF ID *
-                    </label>
-                    {files.backId ? (
-                      <div className="relative bg-background-tertiary border border-border-primary rounded-xl p-4">
-                        <div className="flex items-center space-x-3">
-                          <FileImage className="w-8 h-8 text-accent-primary" />
-                          <div className="flex-1">
-                            <div className="text-sm font-medium text-foreground-primary truncate">
-                              {files.backId.name}
-                            </div>
-                            <div className="text-xs text-foreground-tertiary">
-                              {(files.backId.size / 1024 / 1024).toFixed(2)} MB
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => removeFile('backId')}
-                            className="p-1 hover:bg-background-primary rounded transition-colors"
-                          >
-                            <X className="w-4 h-4 text-foreground-secondary" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="block">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => e.target.files?.[0] && handleFileUpload('backId', e.target.files[0])}
-                          className="hidden"
-                        />
-                        <div className="border-2 border-dashed border-border-primary rounded-xl p-6 text-center hover:border-accent-primary transition-colors cursor-pointer">
-                          <Upload className="w-8 h-8 text-foreground-tertiary mx-auto mb-2" />
-                          <div className="text-sm font-medium text-foreground-primary">Upload Back</div>
-                          <div className="text-xs text-foreground-tertiary">PNG, JPG up to 5MB</div>
-                        </div>
-                      </label>
-                    )}
-                  </div>
-                )}
-
-                {/* Selfie */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground-secondary mb-2">
-                    SELFIE WITH ID *
-                  </label>
-                  {files.selfie ? (
-                    <div className="relative bg-background-tertiary border border-border-primary rounded-xl p-4">
-                      <div className="flex items-center space-x-3">
-                        <Camera className="w-8 h-8 text-accent-primary" />
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-foreground-primary truncate">
-                            {files.selfie.name}
-                          </div>
-                          <div className="text-xs text-foreground-tertiary">
-                            {(files.selfie.size / 1024 / 1024).toFixed(2)} MB
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => removeFile('selfie')}
-                          className="p-1 hover:bg-background-primary rounded transition-colors"
-                        >
-                          <X className="w-4 h-4 text-foreground-secondary" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <label className="block">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => e.target.files?.[0] && handleFileUpload('selfie', e.target.files[0])}
-                        className="hidden"
-                      />
-                      <div className="border-2 border-dashed border-border-primary rounded-xl p-6 text-center hover:border-accent-primary transition-colors cursor-pointer">
-                        <Camera className="w-8 h-8 text-foreground-tertiary mx-auto mb-2" />
-                        <div className="text-sm font-medium text-foreground-primary">Take Selfie</div>
-                        <div className="text-xs text-foreground-tertiary">PNG, JPG up to 5MB</div>
-                      </div>
-                    </label>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <div className="flex items-center justify-end space-x-4 pt-6 border-t border-border-primary">
-              <Button
-                variant="secondary"
-                onClick={() => setShowForm(false)}
-                disabled={submitting}
-              >
-                Cancel
-              </Button>
-              
-              <Button
-                onClick={submitKyc}
-                loading={submitting}
-                disabled={!kycData.fullName || !files.frontId || !files.selfie}
-              >
-                Submit for Review
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Requirements Info */}
       <div className="bg-accent-primary/5 border border-accent-primary/20 rounded-xl p-4">

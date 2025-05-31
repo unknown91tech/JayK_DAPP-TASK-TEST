@@ -35,6 +35,7 @@ const publicRoutes = [
   '/biometric',
   '/api/user/activity',
   '/api/user/biometrics',
+  '/kyc',
   
 ]
 

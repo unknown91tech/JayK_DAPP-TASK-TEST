@@ -16,7 +16,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
             - Large screens: 75% of viewport width (w-3/4)
             - Extra large screens: max 75% but cap at reasonable size (max-w-4xl)
         */}
-        <div className="w-full max-w-md lg:w-3/4 lg:max-w-4xl relative">
+        <div className="w-full max-w-md lg:w-3/4 lg:max-w-6xl relative">
           {/* Header with logo and navigation buttons */}
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-2">
