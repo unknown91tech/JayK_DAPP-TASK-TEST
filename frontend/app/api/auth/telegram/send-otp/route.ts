@@ -30,7 +30,16 @@ async function sendTelegramOTP(telegramUserId: number, otp: string, purpose: str
   try {
     const message = purpose === 'LOGIN' 
       ? `🔐 Your OneStep login code is: *${otp}*\n\nThis code will expire in 10 minutes.\n\n_Never share this code with anyone!_`
-      : `🎉 Welcome to OneStep!\n\nYour verification code is: *${otp}*\n\nThis code will expire in 10 minutes.\n\n_Never share this code with anyone!_`
+      : `🔐 OneStep Authentication
+
+Hi there! 👋
+
+Your verification code is: <code>${otp}</code>
+
+⏰ This code expires in 10 minutes
+🔒 Keep this code secure and don't share it
+
+✨ Welcome to OneStep Authentication!`
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',

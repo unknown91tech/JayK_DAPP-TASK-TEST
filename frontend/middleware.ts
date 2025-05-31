@@ -11,6 +11,7 @@ const publicRoutes = [
   '/help',
   '/privacy',
   '/terms',
+  '/dashboard',
   '/api/auth/signup',
   '/api/auth/login',
   '/api/auth/verify-otp',
@@ -37,6 +38,7 @@ const publicRoutes = [
   '/api/user/biometrics',
   '/kyc',
   '/api/auth/webauthn/register',
+  '/api/auth/telegram/send-login-opt',
   
 ]
 
