@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
     
     // Parse and validate the request body
     const body = await request.json()
+    console.log("hello from register",body);
     const registration = registerBiometricSchema.parse(body)
     
     console.log(`🔑 Registering ${registration.deviceType} biometric credential`)

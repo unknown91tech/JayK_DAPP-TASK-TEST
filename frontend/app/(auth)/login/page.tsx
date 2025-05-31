@@ -500,7 +500,7 @@ export default function LoginPage() {
       const userHandle = (assertion.response as AuthenticatorAssertionResponse).userHandle
 
       // Step 5: Send the assertion to the server for verification
-      const verifyResponse = await fetch('/api/auth/webauthn/verify-assertion', {
+      const verifyResponse = await fetch('/api/auth/webauthn/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
