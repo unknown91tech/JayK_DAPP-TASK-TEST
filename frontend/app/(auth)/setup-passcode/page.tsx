@@ -73,10 +73,10 @@ export default function SetupPasscodePage() {
         console.log('✅ Passcode created successfully!')
         setSuccess('✅ Passcode created successfully! Proceeding to biometric setup...')
         
-        // Small delay to show success message, then move to next step
+        // Small delay to show success message, then move to biometric setup
         setTimeout(() => {
           console.log('🔄 Redirecting to biometrics setup...')
-          router.push('/login')
+          router.push('/biometrics') // Changed from '/login' to '/biometrics'
         }, 1500)
       } else {
         console.log('❌ Passcode creation failed:', result.error)
@@ -117,7 +117,7 @@ export default function SetupPasscodePage() {
         </p>
       </div>
 
-      {/* Progress indicator showing current step */}
+      {/* Progress indicator showing current step - Updated to show 3 steps */}
       <div className="flex items-center justify-center space-x-4 py-4">
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 rounded-full bg-status-success text-background-primary flex items-center justify-center text-sm font-medium">
@@ -131,6 +131,13 @@ export default function SetupPasscodePage() {
             2
           </div>
           <span className="text-sm font-medium text-foreground-primary">Setup Passcode</span>
+        </div>
+        <div className="w-8 h-px bg-border-primary"></div>
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 rounded-full bg-background-tertiary text-foreground-tertiary flex items-center justify-center text-sm font-medium">
+            3
+          </div>
+          <span className="text-sm text-foreground-tertiary">Biometrics</span>
         </div>
       </div>
 
@@ -252,20 +259,17 @@ export default function SetupPasscodePage() {
           </div>
         </div>
 
-        {/* Helpful tips for creating a strong passcode */}
+        {/* Next step preview */}
         <div className="p-4 bg-accent-primary/5 border border-accent-primary/20 rounded-xl">
           <div className="flex items-start space-x-2">
             <svg className="w-5 h-5 text-accent-primary mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <p className="text-sm font-medium text-accent-primary mb-1">💡 Tips for a Strong Passcode:</p>
-              <ul className="text-xs text-foreground-tertiary space-y-1">
-                <li>• Think of a memorable date that's not your birthday</li>
-                <li>• Use the last 6 digits of a phone number you remember</li>
-                <li>• Create a pattern on the number pad that's easy for you to remember</li>
-                <li>• Avoid using the same digit more than twice</li>
-              </ul>
+              <p className="text-sm font-medium text-accent-primary mb-1">📱 Next: Biometric Authentication</p>
+              <p className="text-xs text-foreground-tertiary">
+                After your passcode is created, you'll set up Touch ID or Face ID for even faster and more secure access to your account.
+              </p>
             </div>
           </div>
         </div>
@@ -281,6 +285,7 @@ export default function SetupPasscodePage() {
             <p>Valid Length: <code>{passcode.length === 6 ? 'Yes' : 'No'}</code></p>
             <p>Loading State: <code>{loading ? 'Yes' : 'No'}</code></p>
             <p>AVV Checking: <code>{avvChecking ? 'Yes' : 'No'}</code></p>
+            <p>Next Redirect: <code>/biometrics</code></p>
             <p className="text-yellow-400 mt-2">💡 Try different passcodes to see AVV validation in action!</p>
           </div>
         </div>

@@ -188,7 +188,7 @@ export default function BiometricsSetupPage() {
         }
       }
 
-      // Fourth check: dedicated username storage
+      // Fourth check: dedicated username storage (from setup-account)
       const storedUsername = localStorage.getItem('username')
       if (storedUsername) {
         console.log('📋 Found username in dedicated storage:', storedUsername)
@@ -220,7 +220,7 @@ export default function BiometricsSetupPage() {
         const userData: UserData = {
           username: storedUsername,
           telegramUserId: 1694779369, // Known Telegram ID
-          isSetupComplete: true // Assume setup is complete if they have a username
+          isSetupComplete: false // In setup flow, so not complete yet
         }
 
         // Try to get additional data from login context
@@ -536,13 +536,14 @@ export default function BiometricsSetupPage() {
       reason: 'user_choice'
     }))
     
-    // Mark setup as complete and redirect to dashboard
-    router.push('/dashboard')
+    // Mark setup as complete and redirect to login page (instead of dashboard)
+    console.log('🔄 Redirecting to login page...')
+    router.push('/login')
   }
 
-  // Function to continue to next step or dashboard after successful setup
+  // Function to continue to login after successful setup
   const handleContinue = () => {
-    console.log('✅ Biometric setup complete, continuing to dashboard')
+    console.log('✅ Biometric setup complete, continuing to login')
     
     // Mark biometric setup as complete
     localStorage.setItem('onestep_setup_complete', JSON.stringify({
@@ -551,7 +552,9 @@ export default function BiometricsSetupPage() {
       method: selectedMethod
     }))
     
-    router.push('/dashboard')
+    // Redirect to login page (instead of dashboard)
+    console.log('🔄 Redirecting to login page...')
+    router.push('/login')
   }
 
   // Render method selection step
@@ -674,7 +677,7 @@ export default function BiometricsSetupPage() {
         )}
       </div>
 
-      {/* Skip option */}
+      {/* Skip option with updated messaging */}
       <div className="pt-6 border-t border-border-primary">
         <div className="text-center space-y-3">
           <p className="text-sm text-foreground-tertiary">
@@ -685,7 +688,7 @@ export default function BiometricsSetupPage() {
             onClick={handleSkipSetup}
             disabled={loading}
           >
-            Skip for now
+            Skip and Continue to Login
           </Button>
         </div>
       </div>
@@ -823,7 +826,7 @@ export default function BiometricsSetupPage() {
           onClick={handleContinue}
           className="w-full"
         >
-          Continue to Dashboard
+          Continue to Login
         </Button>
       </div>
 
@@ -875,20 +878,20 @@ export default function BiometricsSetupPage() {
   // Main render function
   return (
     <div className="space-y-6">
-      {/* Progress indicator for multi-step setup */}
+      {/* Progress indicator for multi-step setup - Updated to show 3 steps */}
       <div className="flex items-center justify-center space-x-4 py-4">
         <div className="flex items-center space-x-2">
-          <div className="progress-step completed">✓</div>
+          <div className="w-8 h-8 rounded-full bg-status-success text-background-primary flex items-center justify-center text-sm font-medium">✓</div>
           <span className="text-sm text-foreground-secondary">Account Setup</span>
         </div>
         <div className="w-8 h-px bg-border-primary"></div>
         <div className="flex items-center space-x-2">
-          <div className="progress-step completed">✓</div>
+          <div className="w-8 h-8 rounded-full bg-status-success text-background-primary flex items-center justify-center text-sm font-medium">✓</div>
           <span className="text-sm text-foreground-secondary">Passcode</span>
         </div>
         <div className="w-8 h-px bg-border-primary"></div>
         <div className="flex items-center space-x-2">
-          <div className="progress-step active">3</div>
+          <div className="w-8 h-8 rounded-full bg-accent-primary text-background-primary flex items-center justify-center text-sm font-medium">3</div>
           <span className="text-sm font-medium text-foreground-primary">Biometrics</span>
         </div>
       </div>
@@ -913,6 +916,7 @@ export default function BiometricsSetupPage() {
             <p>📊 Registration Progress: <span className="text-yellow-400">{registrationProgress}%</span></p>
             <p>👤 Username: <span className="text-yellow-400">{userData?.username || getUsernameFromStorage() || 'Not found'}</span></p>
             <p>🏷️ OS-ID: <span className="text-yellow-400">{userData?.osId || 'Not loaded'}</span></p>
+            <p>🔄 Next Redirect: <span className="text-green-400">/login</span></p>
             
             {/* Check for stored biometric data */}
             {(() => {
