@@ -207,57 +207,6 @@ export default function ActivityPage() {
     }
   }
 
-  // Fallback data for development when API fails
-  const setFallbackData = () => {
-    const mockActivities: ActivityEvent[] = [
-      {
-        id: '1',
-        eventType: 'LOGIN_SUCCESS',
-        description: 'Successful login via Telegram',
-        timestamp: new Date().toISOString(),
-        ipAddress: '103.120.45.123',
-        deviceInfo: 'Chrome 120 on MacOS Sonoma',
-        location: 'Mumbai, Maharashtra, IN',
-        riskLevel: 'LOW',
-        success: true,
-        metadata: { loginMethod: 'telegram', sessionDuration: '2h 15m' }
-      },
-      {
-        id: '2',
-        eventType: 'PASSCODE_CHANGE',
-        description: 'Passcode updated successfully',
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        ipAddress: '103.120.45.123',
-        deviceInfo: 'Chrome 120 on MacOS Sonoma',
-        location: 'Mumbai, Maharashtra, IN',
-        riskLevel: 'LOW',
-        success: true,
-        metadata: { previousCodeChanged: '2 months ago' }
-      },
-      {
-        id: '3',
-        eventType: 'LOGIN_FAILED',
-        description: 'Failed login attempt - Invalid OTP',
-        timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-        ipAddress: '45.123.67.89',
-        deviceInfo: 'Firefox 119 on Windows 11',
-        location: 'Unknown Location',
-        riskLevel: 'HIGH',
-        success: false,
-        metadata: { attempts: 3, reason: 'Invalid OTP code' }
-      }
-    ]
-    
-    setActivities(mockActivities)
-    setSummary({
-      total: mockActivities.length,
-      successful: mockActivities.filter(a => a.success).length,
-      failed: mockActivities.filter(a => !a.success).length,
-      highRisk: mockActivities.filter(a => a.riskLevel === 'HIGH' || a.riskLevel === 'CRITICAL').length,
-      recent24h: mockActivities.length
-    })
-  }
-
   // Update filter and reset to first page
   const updateFilter = (key: keyof ActivityFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))

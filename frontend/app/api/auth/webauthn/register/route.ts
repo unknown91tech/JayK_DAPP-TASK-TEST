@@ -5,73 +5,28 @@ import { prisma, logSecurityEvent } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/middleware'
 
 // Validation schema for biometric registration
-// This matches the data structure your frontend is sending
 const registerBiometricSchema = z.object({
   id: z.string().min(1, 'Credential ID is required'), // The credential ID from WebAuthn
   rawId: z.string().min(1, 'Raw credential ID is required'), // Base64url encoded raw ID
   response: z.object({
-    // For registration, we expect attestationObject and clientDataJSON
-    attestationObject: z.string().min(1, 'Attestation object is required').optional(),
-    clientDataJSON: z.string().min(1, 'Client data JSON is required'),
-    // Your frontend is sending authentication response data, so let's handle both cases
-    authenticatorData: z.string().optional(), // For authentication flow
-    signature: z.string().optional(), // For authentication flow
-    userHandle: z.string().nullable().optional(), // For authentication flow
+    attestationObject: z.string().min(1, 'Attestation object is required'), // Contains public key
+    clientDataJSON: z.string().min(1, 'Client data JSON is required'), // Client context
   }),
   type: z.literal('public-key'), // Must be "public-key"
-  // Additional fields your frontend is sending
-  username: z.string().optional(), // Username for verification
-  osId: z.string().optional(), // OS-ID for verification
+  deviceType: z.enum(['touch', 'face']), // What type of biometric was registered
+  deviceName: z.string().optional() // Optional friendly name for the device
 })
 
 // Utility function to convert base64url to Buffer (for processing WebAuthn data)
 const base64urlToBuffer = (base64url: string): Buffer => {
-  try {
-    // Add padding if needed (base64url doesn't use padding)
-    const padding = '='.repeat((4 - (base64url.length % 4)) % 4)
-    const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/')
-    return Buffer.from(base64, 'base64')
-  } catch (error) {
-    console.error('❌ Failed to decode base64url:', error)
-    throw new Error('Invalid base64url encoding')
-  }
+  // Add padding if needed (base64url doesn't use padding)
+  const padding = '='.repeat((4 - (base64url.length % 4)) % 4)
+  const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/')
+  return Buffer.from(base64, 'base64')
 }
 
-// Utility function to convert Buffer to base64url (for storing data)
-const bufferToBase64url = (buffer: Buffer): string => {
-  return buffer.toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-}
-
-// Function to extract public key from authenticator data
-// This is a simplified version - in production you'd use a proper WebAuthn library
-const extractPublicKeyFromAuthData = (authenticatorData: string): Buffer => {
-  try {
-    // Decode the authenticator data
-    const authDataBuffer = base64urlToBuffer(authenticatorData)
-    
-    // In a real implementation, you would:
-    // 1. Parse the authenticator data structure
-    // 2. Extract the attested credential data (if present)
-    // 3. Parse the COSE public key
-    // 4. Convert it to a format suitable for storage
-    
-    // For this demo, we'll create a mock public key from the authenticator data
-    // In production, you'd use libraries like 'cbor' or '@webauthn/server' to properly parse this
-    const mockPublicKey = Buffer.from(authDataBuffer.subarray(0, Math.min(65, authDataBuffer.length)))
-    
-    console.log(`📝 Extracted public key: ${mockPublicKey.length} bytes from authenticator data`)
-    return mockPublicKey
-    
-  } catch (error) {
-    console.error('❌ Failed to extract public key from authenticator data:', error)
-    throw new Error('Invalid authenticator data format')
-  }
-}
-
-// Function to extract public key from attestation object (for proper registration flow)
+// Function to parse the attestation object and extract public key
+// This is a simplified version - in production you'd use a proper CBOR library
 const extractPublicKeyFromAttestation = (attestationObject: string): Buffer => {
   try {
     // Decode the attestation object
@@ -85,47 +40,36 @@ const extractPublicKeyFromAttestation = (attestationObject: string): Buffer => {
     // 5. Convert it to a format suitable for storage
     
     // For this demo, we'll create a mock public key from the attestation data
-    // In production, you'd use libraries like 'cbor' or '@webauthn/server' to properly parse this
-    const mockPublicKey = Buffer.from(attestationBuffer.subarray(0, Math.min(65, attestationBuffer.length)))
+    // In production, you'd use libraries like 'cbor' or 'fido2-lib' to properly parse this
+    const mockPublicKey = Buffer.from(attestationBuffer.subarray(0, 65)) // Typical EC P-256 key size
     
-    console.log(`📝 Extracted public key: ${mockPublicKey.length} bytes from attestation object`)
+    console.log(`📝 Extracted public key: ${mockPublicKey.length} bytes`)
     return mockPublicKey
     
   } catch (error) {
-    console.error('❌ Failed to extract public key from attestation:', error)
+    console.error('❌ Failed to extract public key:', error)
     throw new Error('Invalid attestation object format')
   }
 }
 
 // Function to validate the client data JSON
-const validateClientData = (clientDataJSON: string, expectedOrigin: string): { type: string, challenge: string } => {
+const validateClientData = (clientDataJSON: string, expectedOrigin: string): void => {
   try {
     // Decode and parse the client data
     const clientDataBuffer = base64urlToBuffer(clientDataJSON)
     const clientData = JSON.parse(clientDataBuffer.toString('utf-8'))
     
-    console.log('🔍 Client data:', clientData)
-    
-    // For registration, we expect 'webauthn.create', for authentication 'webauthn.get'
-    // Since your frontend might be sending either, let's accept both for now
-    if (!['webauthn.create', 'webauthn.get'].includes(clientData.type)) {
-      throw new Error(`Invalid client data type - expected webauthn.create or webauthn.get, got ${clientData.type}`)
+    // Verify this is a registration operation
+    if (clientData.type !== 'webauthn.create') {
+      throw new Error('Invalid client data type - expected webauthn.create')
     }
     
     // Verify the origin matches our application
     if (clientData.origin !== expectedOrigin) {
-      console.warn(`⚠️ Origin mismatch: expected ${expectedOrigin}, got ${clientData.origin}`)
-      // In development, we might want to be more lenient
-      if (process.env.NODE_ENV !== 'development') {
-        throw new Error(`Origin mismatch: expected ${expectedOrigin}, got ${clientData.origin}`)
-      }
+      throw new Error(`Origin mismatch: expected ${expectedOrigin}, got ${clientData.origin}`)
     }
     
     console.log('✅ Client data validation passed')
-    return {
-      type: clientData.type,
-      challenge: clientData.challenge
-    }
     
   } catch (error) {
     console.error('❌ Client data validation failed:', error)
@@ -133,102 +77,33 @@ const validateClientData = (clientDataJSON: string, expectedOrigin: string): { t
   }
 }
 
-// Function to determine device type based on user agent
-const determineDeviceType = (userAgent: string): 'touch' | 'face' | 'unknown' => {
-  const ua = userAgent.toLowerCase()
-  
-  // Check for Touch ID capable devices
-  if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('macintosh')) {
-    // Modern Apple devices support both Touch ID and Face ID
-    // We'll default to 'touch' but in a real app you might want to detect more specifically
-    return 'touch'
-  }
-  
-  // Check for other biometric capable devices
-  if (ua.includes('android')) {
-    return 'touch' // Most Android devices with biometrics use fingerprint
-  }
-  
-  // Check for Windows Hello
-  if (ua.includes('windows')) {
-    return 'face' // Windows Hello often uses face recognition
-  }
-  
-  return 'unknown'
-}
-
 export async function POST(request: NextRequest) {
   try {
-    console.log('📝 Starting WebAuthn biometric registration/authentication processing')
+    console.log('📝 Starting WebAuthn biometric registration')
     
     // Parse and validate the request body
     const body = await request.json()
-    console.log('📦 Received WebAuthn data:', {
-      id: body.id,
-      type: body.type,
-      hasResponse: !!body.response,
-      username: body.username,
-      osId: body.osId
-    })
+    console.log("hello from register",body);
+    const registration = registerBiometricSchema.parse(body)
     
-    const registrationData = registerBiometricSchema.parse(body)
+    console.log(`🔑 Registering ${registration.deviceType} biometric credential`)
     
     // Get client information for logging
     const clientIp = request.headers.get('x-forwarded-for') || 'unknown'
     const userAgent = request.headers.get('user-agent') || 'unknown'
     
-    // Get authenticated user from session
-    // Note: Your frontend might be calling this during the authentication flow,
-    // so we might need to handle cases where there's no active session yet
-    let authUser
-    try {
-      authUser = requireAuth(request)
-    } catch (error) {
-      // If there's no active session but we have username/osId, we can still process
-      if (registrationData.username || registrationData.osId) {
-        console.log('ℹ️ No active session found, but username/osId provided for lookup')
-      } else {
-        console.log('❌ No authentication and no user identifier provided')
-        return NextResponse.json(
-          { error: 'Authentication required or user identifier must be provided' },
-          { status: 401 }
-        )
-      }
-    }
+    // Get authenticated user from session (using your existing auth middleware)
+    const authUser = requireAuth(request)
     
-    // Find the user in the database
-    let user
-    if (authUser) {
-      // Use the authenticated user
-      user = await prisma.user.findUnique({
-        where: { id: authUser.userId },
-        include: {
-          biometrics: { 
-            where: { isActive: true } // Only count active biometrics
-          }
+    // Find the user in the database with their existing biometric credentials
+    const user = await prisma.user.findUnique({
+      where: { id: authUser.userId },
+      include: {
+        biometrics: { 
+          where: { isActive: true } // Only count active biometrics
         }
-      })
-    } else if (registrationData.osId) {
-      // Look up user by OS-ID
-      user = await prisma.user.findUnique({
-        where: { osId: registrationData.osId },
-        include: {
-          biometrics: { 
-            where: { isActive: true }
-          }
-        }
-      })
-    } else if (registrationData.username) {
-      // Look up user by username
-      user = await prisma.user.findUnique({
-        where: { username: registrationData.username },
-        include: {
-          biometrics: { 
-            where: { isActive: true }
-          }
-        }
-      })
-    }
+      }
+    })
     
     if (!user) {
       console.log('❌ User not found in database')
@@ -238,7 +113,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    console.log(`✅ Found user: ${user.osId} (${user.username}) with ${user.biometrics.length} existing biometrics`)
+    console.log(`✅ Found user: ${user.osId} with ${user.biometrics.length} existing biometrics`)
     
     // Check if user already has the maximum number of biometric credentials
     const maxBiometrics = 3 // Allow up to 3 biometric credentials per user
@@ -253,7 +128,7 @@ export async function POST(request: NextRequest) {
         metadata: { 
           currentCount: user.biometrics.length,
           maxAllowed: maxBiometrics,
-          credentialId: registrationData.id
+          attemptedType: registration.deviceType
         },
         ipAddress: clientIp,
         userAgent,
@@ -272,7 +147,7 @@ export async function POST(request: NextRequest) {
     
     // Check if this exact credential is already registered
     const existingCredential = await prisma.biometric.findUnique({
-      where: { credentialId: registrationData.id }
+      where: { credentialId: registration.id }
     })
     
     if (existingCredential) {
@@ -284,8 +159,8 @@ export async function POST(request: NextRequest) {
         eventType: 'BIOMETRIC_REGISTER_DUPLICATE',
         description: 'Attempted to register duplicate biometric credential',
         metadata: { 
-          credentialId: registrationData.id,
-          existingBiometricId: existingCredential.id
+          credentialId: registration.id,
+          deviceType: registration.deviceType
         },
         ipAddress: clientIp,
         userAgent,
@@ -306,9 +181,8 @@ export async function POST(request: NextRequest) {
       ? 'http://localhost:3000'
       : process.env.NEXTAUTH_URL || 'https://yourdomain.com'
     
-    let clientDataInfo
     try {
-      clientDataInfo = validateClientData(registrationData.response.clientDataJSON, expectedOrigin)
+      validateClientData(registration.response.clientDataJSON, expectedOrigin)
     } catch (error) {
       console.log('❌ Client data validation failed:', error)
       
@@ -320,7 +194,7 @@ export async function POST(request: NextRequest) {
         metadata: { 
           error: error instanceof Error ? error.message : 'Unknown validation error',
           expectedOrigin,
-          credentialId: registrationData.id
+          credentialId: registration.id
         },
         ipAddress: clientIp,
         userAgent,
@@ -336,20 +210,10 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Extract the public key from the provided data
+    // Extract the public key from the attestation object
     let publicKey: Buffer
     try {
-      if (registrationData.response.attestationObject) {
-        // Proper registration flow with attestation object
-        publicKey = extractPublicKeyFromAttestation(registrationData.response.attestationObject)
-        console.log('✅ Using attestation object for public key extraction')
-      } else if (registrationData.response.authenticatorData) {
-        // Authentication flow data - extract what we can
-        publicKey = extractPublicKeyFromAuthData(registrationData.response.authenticatorData)
-        console.log('✅ Using authenticator data for public key extraction')
-      } else {
-        throw new Error('No attestation object or authenticator data provided')
-      }
+      publicKey = extractPublicKeyFromAttestation(registration.response.attestationObject)
     } catch (error) {
       console.log('❌ Failed to extract public key:', error)
       
@@ -362,29 +226,25 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Determine device type based on user agent since frontend might not specify
-    const deviceType = determineDeviceType(userAgent)
-    
-    // Generate a friendly device name
-    const deviceName = `${deviceType === 'touch' ? 'Touch ID' : deviceType === 'face' ? 'Face ID' : 'Biometric'} - ${
-      userAgent.includes('iPhone') ? 'iPhone' :
-      userAgent.includes('iPad') ? 'iPad' :
-      userAgent.includes('Mac') ? 'Mac' :
-      userAgent.includes('Android') ? 'Android' :
-      userAgent.includes('Windows') ? 'Windows' :
-      'Device'
-    }`
+    // Generate a friendly device name if not provided
+    const deviceName = registration.deviceName || 
+      `${registration.deviceType === 'touch' ? 'Touch ID' : 'Face ID'} - ${
+        userAgent.includes('iPhone') ? 'iPhone' :
+        userAgent.includes('iPad') ? 'iPad' :
+        userAgent.includes('Mac') ? 'Mac' :
+        'Device'
+      }`
     
     // Store the biometric credential in the database
     console.log('💾 Storing biometric credential in database...')
     
     const biometric = await prisma.biometric.create({
       data: {
-        userId: user.id, // Link to the user
-        credentialId: registrationData.id, // Store the WebAuthn credential ID
+        userId: user.id, // Link to the authenticated user
+        credentialId: registration.id, // Store the WebAuthn credential ID
         publicKey: publicKey, // Store the public key for signature verification
         counter: 0, // Initialize signature counter (prevents replay attacks)
-        deviceType: deviceType, // Detected device type
+        deviceType: registration.deviceType, // 'touch' or 'face'
         isActive: true, // Mark as active and ready for use
         // lastUsedAt will be null until first authentication
       }
@@ -396,15 +256,13 @@ export async function POST(request: NextRequest) {
     await logSecurityEvent({
       userId: user.id,
       eventType: 'BIOMETRIC_REGISTERED',
-      description: `${deviceType} biometric credential registered successfully`,
+      description: `${registration.deviceType} biometric credential registered successfully`,
       metadata: { 
         biometricId: biometric.id,
-        credentialId: registrationData.id,
-        deviceType: deviceType,
+        credentialId: registration.id,
+        deviceType: registration.deviceType,
         deviceName,
-        publicKeyLength: publicKey.length,
-        clientDataType: clientDataInfo.type,
-        registrationMethod: registrationData.response.attestationObject ? 'proper_registration' : 'auth_flow_fallback'
+        publicKeyLength: publicKey.length
       },
       ipAddress: clientIp,
       userAgent,
@@ -434,10 +292,9 @@ export async function POST(request: NextRequest) {
     // Return success response with relevant information
     return NextResponse.json({
       success: true,
-      message: `${deviceType === 'touch' ? 'Touch ID' : deviceType === 'face' ? 'Face ID' : 'Biometric'} registered successfully!`,
+      message: `${registration.deviceType === 'touch' ? 'Touch ID' : 'Face ID'} registered successfully!`,
       biometric: {
         id: biometric.id,
-        credentialId: biometric.credentialId,
         deviceType: biometric.deviceType,
         deviceName,
         createdAt: biometric.createdAt,
@@ -445,7 +302,6 @@ export async function POST(request: NextRequest) {
       },
       user: {
         osId: user.osId,
-        username: user.username,
         totalBiometrics: totalActiveBiometrics,
         isSetupComplete,
         canAddMore: totalActiveBiometrics < maxBiometrics
@@ -459,22 +315,17 @@ export async function POST(request: NextRequest) {
     const clientIp = request.headers.get('x-forwarded-for') || 'unknown'
     const userAgent = request.headers.get('user-agent') || 'unknown'
     
-    // Don't let logging errors crash the response
-    try {
-      await logSecurityEvent({
-        eventType: 'BIOMETRIC_REGISTER_ERROR',
-        description: 'Biometric registration encountered an error',
-        metadata: { 
-          error: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined // Truncate stack trace
-        },
-        ipAddress: clientIp,
-        userAgent,
-        riskLevel: 'HIGH'
-      })
-    } catch (logError) {
-      console.error('Failed to log security event:', logError)
-    }
+    await logSecurityEvent({
+      eventType: 'BIOMETRIC_REGISTER_ERROR',
+      description: 'Biometric registration encountered an error',
+      metadata: { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined // Truncate stack trace
+      },
+      ipAddress: clientIp,
+      userAgent,
+      riskLevel: 'HIGH'
+    }).catch(console.error) // Don't let logging errors crash the response
     
     // Handle different types of errors appropriately
     if (error instanceof z.ZodError) {
@@ -508,24 +359,24 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Handle other HTTP methods with proper error responses
+// Handle other HTTP methods
 export async function GET() {
   return NextResponse.json(
-    { error: 'Method not allowed - use POST to register biometric credentials' },
+    { error: 'Method not allowed' },
     { status: 405 }
   )
 }
 
 export async function PUT() {
   return NextResponse.json(
-    { error: 'Method not allowed - use POST to register biometric credentials' },
+    { error: 'Method not allowed' },
     { status: 405 }
   )
 }
 
 export async function DELETE() {
   return NextResponse.json(
-    { error: 'Method not allowed - use DELETE /api/user/biometrics to remove credentials' },
+    { error: 'Method not allowed' },
     { status: 405 }
   )
 }

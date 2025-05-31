@@ -34,6 +34,7 @@ const publicRoutes = [
   '/api/security/avv',
   '/biometric',
   '/api/user/activity',
+  '/api/user/biometrics',
   
 ]
 

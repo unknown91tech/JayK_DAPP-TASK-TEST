@@ -17,10 +17,41 @@ import {
   Unlock,
   Activity,
   Settings,
-  Download
+  Download,
+  Trash2,
+  Plus
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PasscodeInput } from '@/components/ui/passcode-input'
+
+interface BiometricCredential {
+  id: string
+  credentialId: string
+  deviceName: string
+  deviceType: string
+  createdAt: string
+  lastUsedAt: string | null
+  isActive: boolean
+  daysSinceCreated: number
+  daysSinceLastUse: number | null
+  status: 'used' | 'registered'
+}
+
+interface BiometricData {
+  user: {
+    osId: string
+    username: string
+    isSetupComplete: boolean
+  }
+  biometrics: BiometricCredential[]
+  summary: {
+    totalActive: number
+    maxAllowed: number
+    canAddMore: boolean
+    hasAnyBiometrics: boolean
+    mostRecentlyUsed: string | null
+  }
+}
 
 interface SecurityEvent {
   id: string
@@ -51,10 +82,12 @@ export default function SecurityPage() {
     securityScore: 98
   })
   
+  const [biometricData, setBiometricData] = useState<BiometricData | null>(null)
   const [recentEvents, setRecentEvents] = useState<SecurityEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [showPasscodeChange, setShowPasscodeChange] = useState(false)
   const [changingPasscode, setChangingPasscode] = useState(false)
+  const [deletingBiometric, setDeletingBiometric] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   useEffect(() => {
@@ -63,13 +96,90 @@ export default function SecurityPage() {
 
   const fetchSecurityData = async () => {
     try {
-      // In a real app, these would be separate API calls
-      // For now, we'll use mock data
+      // Debug: Check what's in localStorage
+      console.log('🔍 Checking localStorage for user data...')
+      const username = localStorage.getItem('username')
+      const osId = localStorage.getItem('osId')
+      const userId = localStorage.getItem('userId')
+      
+      console.log('📦 localStorage contents:', {
+        username,
+        osId,
+        userId,
+        allKeys: Object.keys(localStorage)
+      })
+      
+      // If no username, try to get it from user profile API first
+      if (!username) {
+        console.log('⚠️ No username in localStorage, trying to fetch from profile...')
+        try {
+          const profileResponse = await fetch('/api/user/profile', {
+            credentials: 'include'
+          })
+          
+          if (profileResponse.ok) {
+            const profileData = await profileResponse.json()
+            console.log('👤 Profile data received:', profileData)
+            
+            // Store the username for future use
+            if (profileData.user?.username) {
+              localStorage.setItem('username', profileData.user.username)
+              console.log('💾 Stored username in localStorage:', profileData.user.username)
+            }
+            if (profileData.user?.osId) {
+              localStorage.setItem('osId', profileData.user.osId)
+              console.log('💾 Stored osId in localStorage:', profileData.user.osId)
+            }
+          }
+        } catch (error) {
+          console.error('❌ Failed to fetch profile:', error)
+        }
+      }
+      
+      // Get updated values after potential profile fetch
+      const finalUsername = localStorage.getItem('username')
+      const finalOsId = localStorage.getItem('osId')
+      
+      // Build query parameters for user identification
+      const queryParams = new URLSearchParams()
+      if (finalUsername) queryParams.append('username', finalUsername)
+      if (finalOsId) queryParams.append('osId', finalOsId)
+      
+      console.log('🔗 Making biometrics request with params:', queryParams.toString())
+      
+      // Fetch biometric data with user identifier
+      const biometricsResponse = await fetch(`/api/user/biometrics?${queryParams.toString()}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          // Also send as headers as backup
+          ...(finalUsername && { 'X-Username': finalUsername }),
+          ...(finalOsId && { 'X-OS-ID': finalOsId })
+        }
+      })
+      
+      if (biometricsResponse.ok) {
+        const biometricsData = await biometricsResponse.json()
+        setBiometricData(biometricsData)
+        
+        // Update security settings based on actual biometric data
+        setSecuritySettings(prev => ({
+          ...prev,
+          biometricsEnabled: biometricsData.summary.hasAnyBiometrics
+        }))
+        
+        console.log('📱 Loaded biometric data:', biometricsData)
+      } else {
+        console.error('Failed to fetch biometric data:', biometricsResponse.statusText)
+        setMessage({ type: 'error', text: 'Failed to load biometric information' })
+      }
+      
+      // Mock recent events (in real app, this would be an API call)
       const mockEvents: SecurityEvent[] = [
         {
           id: '1',
           eventType: 'LOGIN_SUCCESS',
-          description: 'Successful login via Telegram',
+          description: 'Successful login via biometrics',
           timestamp: new Date().toISOString(),
           ipAddress: '103.120.45.123',
           deviceInfo: 'Chrome on MacOS',
@@ -77,21 +187,12 @@ export default function SecurityPage() {
         },
         {
           id: '2',
-          eventType: 'PASSCODE_CHANGE',
-          description: 'Passcode updated successfully',
+          eventType: 'BIOMETRIC_REGISTERED',
+          description: 'New Touch ID credential registered',
           timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
           ipAddress: '103.120.45.123',
           deviceInfo: 'Chrome on MacOS',
           riskLevel: 'LOW'
-        },
-        {
-          id: '3',
-          eventType: 'DEVICE_REGISTERED',
-          description: 'New device registered: iPhone 15',
-          timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '103.120.45.124',
-          deviceInfo: 'Safari on iOS',
-          riskLevel: 'MEDIUM'
         }
       ]
       
@@ -119,7 +220,7 @@ export default function SecurityPage() {
       if (response.ok) {
         setMessage({ type: 'success', text: 'Passcode updated successfully!' })
         setShowPasscodeChange(false)
-        await fetchSecurityData() // Refresh security events
+        await fetchSecurityData()
       } else {
         const error = await response.json()
         setMessage({ type: 'error', text: error.error || 'Failed to update passcode' })
@@ -132,6 +233,118 @@ export default function SecurityPage() {
     }
   }
 
+      const handleDeleteBiometric = async (biometricId: string) => {
+    if (!confirm('Are you sure you want to remove this biometric credential? This action cannot be undone.')) {
+      return
+    }
+
+    setDeletingBiometric(biometricId)
+    setMessage(null)
+
+    try {
+      // Get username for the request
+      const username = localStorage.getItem('username')
+      const osId = localStorage.getItem('osId')
+      
+      const queryParams = new URLSearchParams()
+      queryParams.append('id', biometricId)
+      if (username) queryParams.append('username', username)
+      if (osId) queryParams.append('osId', osId)
+
+      const response = await fetch(`/api/user/biometrics?${queryParams.toString()}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        setMessage({ type: 'success', text: 'Biometric credential removed successfully!' })
+        await fetchSecurityData() // Refresh the data
+      } else {
+        const error = await response.json()
+        setMessage({ type: 'error', text: error.error || 'Failed to remove biometric credential' })
+      }
+    } catch (error) {
+      console.error('Failed to delete biometric:', error)
+      setMessage({ type: 'error', text: 'Failed to remove biometric credential. Please try again.' })
+    } finally {
+      setDeletingBiometric(null)
+    }
+  }
+
+  const handleAddBiometric = async () => {
+    // Check if WebAuthn is supported
+    if (!window.PublicKeyCredential) {
+      setMessage({ type: 'error', text: 'Biometric authentication is not supported on this device' })
+      return
+    }
+
+    try {
+      setMessage(null)
+      
+      // Get username from localStorage for the registration
+      const username = localStorage.getItem('username')
+      if (!username) {
+        setMessage({ type: 'error', text: 'Username not found. Please log in again.' })
+        return
+      }
+
+      // Create WebAuthn credential
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: new Uint8Array(32), // In real app, get this from server
+          rp: {
+            name: "OneStep",
+            id: window.location.hostname,
+          },
+          user: {
+            id: new TextEncoder().encode(username),
+            name: username,
+            displayName: username,
+          },
+          pubKeyCredParams: [{alg: -7, type: "public-key"}],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required"
+          },
+          timeout: 60000,
+          attestation: "direct"
+        }
+      }) as PublicKeyCredential
+
+      if (credential) {
+        // Send to your registration endpoint
+        const registrationData = {
+          id: credential.id,
+          rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId))),
+          response: {
+            clientDataJSON: btoa(String.fromCharCode(...new Uint8Array((credential.response as AuthenticatorAttestationResponse).clientDataJSON))),
+            attestationObject: btoa(String.fromCharCode(...new Uint8Array((credential.response as AuthenticatorAttestationResponse).attestationObject)))
+          },
+          type: credential.type,
+          username: username
+        }
+
+        const response = await fetch('/api/auth/webauthn/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(registrationData),
+          credentials: 'include'
+        })
+
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Biometric credential added successfully!' })
+          await fetchSecurityData()
+        } else {
+          const error = await response.json()
+          setMessage({ type: 'error', text: error.error || 'Failed to register biometric credential' })
+        }
+      }
+    } catch (error) {
+      console.error('Biometric registration failed:', error)
+      setMessage({ type: 'error', text: 'Biometric registration failed. Please try again.' })
+    }
+  }
+
   const toggleSetting = async (setting: keyof SecuritySettings) => {
     const newValue = !securitySettings[setting]
     
@@ -140,7 +353,6 @@ export default function SecurityPage() {
       [setting]: newValue
     }))
 
-    // In a real app, you'd make an API call here
     setMessage({ 
       type: 'success', 
       text: `${setting.replace(/([A-Z])/g, ' $1').toLowerCase()} ${newValue ? 'enabled' : 'disabled'}` 
@@ -154,16 +366,6 @@ export default function SecurityPage() {
       case 'HIGH': return 'text-status-error'
       case 'CRITICAL': return 'text-red-600'
       default: return 'text-foreground-secondary'
-    }
-  }
-
-  const getRiskLevelBg = (level: string) => {
-    switch (level) {
-      case 'LOW': return 'bg-status-success/10 border-status-success/20'
-      case 'MEDIUM': return 'bg-status-warning/10 border-status-warning/20'
-      case 'HIGH': return 'bg-status-error/10 border-status-error/20'
-      case 'CRITICAL': return 'bg-red-500/10 border-red-500/20'
-      default: return 'bg-background-tertiary border-border-primary'
     }
   }
 
@@ -184,28 +386,13 @@ export default function SecurityPage() {
     return 'text-status-error'
   }
 
-  const getSecurityRecommendations = () => {
-    const recommendations = []
-    
-    if (!securitySettings.biometricsEnabled) {
-      recommendations.push({
-        title: 'Enable Biometric Authentication',
-        description: 'Add Touch ID or Face ID for faster, more secure access',
-        action: () => toggleSetting('biometricsEnabled'),
-        priority: 'HIGH'
-      })
+  const getDeviceTypeIcon = (deviceType: string) => {
+    switch (deviceType) {
+      case 'face': return <Eye className="w-5 h-5" />
+      case 'touch': 
+      case 'fingerprint': return <Fingerprint className="w-5 h-5" />
+      default: return <Shield className="w-5 h-5" />
     }
-    
-    if (securitySettings.sessionTimeout > 7) {
-      recommendations.push({
-        title: 'Reduce Session Timeout',
-        description: 'Shorter sessions improve security',
-        action: () => {},
-        priority: 'MEDIUM'
-      })
-    }
-
-    return recommendations
   }
 
   if (loading) {
@@ -245,6 +432,29 @@ export default function SecurityPage() {
               <AlertTriangle className="w-5 h-5" />
             )}
             <span className="text-sm font-medium">{message.text}</span>
+          </div>
+        </div>
+      )}
+
+      {/* User Information (if available) */}
+      {biometricData && (
+        <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
+          <h3 className="text-lg font-semibold text-foreground-primary mb-4">Account Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <div className="text-sm text-foreground-secondary">OneStep ID</div>
+              <div className="font-mono text-foreground-primary">{biometricData.user.osId}</div>
+            </div>
+            <div>
+              <div className="text-sm text-foreground-secondary">Username</div>
+              <div className="text-foreground-primary">{biometricData.user.username}</div>
+            </div>
+            <div>
+              <div className="text-sm text-foreground-secondary">Setup Status</div>
+              <div className={`text-sm ${biometricData.user.isSetupComplete ? 'text-status-success' : 'text-status-warning'}`}>
+                {biometricData.user.isSetupComplete ? 'Complete' : 'In Progress'}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -329,6 +539,106 @@ export default function SecurityPage() {
         </div>
       </div>
 
+      {/* Biometric Credentials Management */}
+      {biometricData && (
+        <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground-primary">Biometric Credentials</h3>
+              <p className="text-foreground-secondary">
+                Manage your registered biometric authentication methods
+              </p>
+            </div>
+            
+            {biometricData.summary.canAddMore && (
+              <Button onClick={handleAddBiometric} className="flex items-center space-x-2">
+                <Plus className="w-4 h-4" />
+                <span>Add Biometric</span>
+              </Button>
+            )}
+          </div>
+
+          {biometricData.summary.hasAnyBiometrics ? (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-background-tertiary/50 rounded-xl">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-foreground-primary">{biometricData.summary.totalActive}</div>
+                  <div className="text-sm text-foreground-secondary">Active Credentials</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-foreground-primary">{biometricData.summary.maxAllowed}</div>
+                  <div className="text-sm text-foreground-secondary">Maximum Allowed</div>
+                </div>
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${biometricData.summary.canAddMore ? 'text-status-success' : 'text-status-warning'}`}>
+                    {biometricData.summary.canAddMore ? 'Yes' : 'No'}
+                  </div>
+                  <div className="text-sm text-foreground-secondary">Can Add More</div>
+                </div>
+              </div>
+
+              {/* Biometric List */}
+              <div className="space-y-3">
+                {biometricData.biometrics.map((biometric) => (
+                  <div key={biometric.id} className="flex items-center justify-between p-4 bg-background-tertiary/50 rounded-xl border border-border-primary">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-accent-primary/10 rounded-xl flex items-center justify-center">
+                        {getDeviceTypeIcon(biometric.deviceType)}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-foreground-primary">{biometric.deviceName}</h4>
+                        <div className="flex items-center space-x-4 text-xs text-foreground-secondary">
+                          <span>Added {biometric.daysSinceCreated} days ago</span>
+                          {biometric.lastUsedAt ? (
+                            <span>Last used {biometric.daysSinceLastUse} days ago</span>
+                          ) : (
+                            <span className="text-status-warning">Never used</span>
+                          )}
+                          <span className={`px-2 py-1 rounded-full ${
+                            biometric.status === 'used' ? 'bg-status-success/10 text-status-success' : 'bg-status-warning/10 text-status-warning'
+                          }`}>
+                            {biometric.status === 'used' ? 'Active' : 'Registered'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleDeleteBiometric(biometric.id)}
+                      disabled={deletingBiometric === biometric.id}
+                      className="text-status-error hover:text-status-error hover:bg-status-error/10"
+                    >
+                      {deletingBiometric === biometric.id ? (
+                        <div className="w-4 h-4 animate-spin border-2 border-current border-t-transparent rounded-full" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-accent-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Fingerprint className="w-8 h-8 text-accent-primary" />
+              </div>
+              <h4 className="text-lg font-semibold text-foreground-primary mb-2">No Biometric Credentials</h4>
+              <p className="text-foreground-secondary mb-6">
+                Add Touch ID, Face ID, or fingerprint authentication for faster and more secure access
+              </p>
+              <Button onClick={handleAddBiometric} className="flex items-center space-x-2">
+                <Plus className="w-4 h-4" />
+                <span>Add Your First Biometric</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Security Settings */}
       <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
         <h3 className="text-lg font-semibold text-foreground-primary mb-6">Security Settings</h3>
@@ -366,7 +676,12 @@ export default function SecurityPage() {
               </div>
               <div>
                 <h4 className="text-sm font-semibold text-foreground-primary">Biometric Authentication</h4>
-                <p className="text-sm text-foreground-secondary">Touch ID, Face ID, or fingerprint login</p>
+                <p className="text-sm text-foreground-secondary">
+                  {biometricData?.summary.hasAnyBiometrics 
+                    ? `${biometricData.summary.totalActive} credential(s) registered`
+                    : 'Touch ID, Face ID, or fingerprint login'
+                  }
+                </p>
               </div>
             </div>
             
@@ -474,73 +789,40 @@ export default function SecurityPage() {
 
       {/* Recent Security Events */}
       <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-foreground-primary">Recent Security Events</h3>
-          <Button variant="ghost" size="sm">
-            View All Events
-          </Button>
-        </div>
-
+        <h3 className="text-lg font-semibold text-foreground-primary mb-6">Recent Security Events</h3>
+        
         <div className="space-y-4">
           {recentEvents.map((event) => (
-            <div key={event.id} className="flex items-start space-x-4 p-4 bg-background-tertiary/50 rounded-xl">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${getRiskLevelBg(event.riskLevel)}`}>
-                {event.eventType.includes('LOGIN') && <Lock className="w-5 h-5" />}
-                {event.eventType.includes('PASSCODE') && <Key className="w-5 h-5" />}
-                {event.eventType.includes('DEVICE') && <Smartphone className="w-5 h-5" />}
-                {!event.eventType.includes('LOGIN') && !event.eventType.includes('PASSCODE') && !event.eventType.includes('DEVICE') && (
-                  <Shield className="w-5 h-5" />
-                )}
-              </div>
-              
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium text-foreground-primary">{event.description}</h4>
-                    <div className="flex items-center space-x-4 mt-1 text-sm text-foreground-tertiary">
-                      <div className="flex items-center space-x-1">
-                        <Clock className="w-3 h-3" />
-                        <span>{formatEventTime(event.timestamp)}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <MapPin className="w-3 h-3" />
-                        <span>{event.ipAddress}</span>
-                      </div>
-                      <span>{event.deviceInfo}</span>
-                    </div>
+            <div key={event.id} className="flex items-center justify-between p-4 bg-background-tertiary/50 rounded-xl">
+              <div className="flex items-center space-x-4">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  event.riskLevel === 'LOW' ? 'bg-status-success/10' :
+                  event.riskLevel === 'MEDIUM' ? 'bg-status-warning/10' :
+                  'bg-status-error/10'
+                }`}>
+                  <Activity className={`w-5 h-5 ${getRiskLevelColor(event.riskLevel)}`} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground-primary">{event.description}</h4>
+                  <div className="flex items-center space-x-4 text-xs text-foreground-secondary">
+                    <span>{formatEventTime(event.timestamp)}</span>
+                    <span>{event.ipAddress}</span>
+                    <span>{event.deviceInfo}</span>
                   </div>
-                  
-                  <span className={`px-2 py-1 rounded-lg text-xs font-medium border ${getRiskLevelBg(event.riskLevel)} ${getRiskLevelColor(event.riskLevel)}`}>
-                    {event.riskLevel}
-                  </span>
                 </div>
               </div>
+              
+              <span className={`text-xs px-2 py-1 rounded-full ${
+                event.riskLevel === 'LOW' ? 'bg-status-success/10 text-status-success' :
+                event.riskLevel === 'MEDIUM' ? 'bg-status-warning/10 text-status-warning' :
+                'bg-status-error/10 text-status-error'
+              }`}>
+                {event.riskLevel}
+              </span>
             </div>
           ))}
         </div>
       </div>
-
-      {/* Security Recommendations */}
-      {getSecurityRecommendations().length > 0 && (
-        <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
-          <h3 className="text-lg font-semibold text-foreground-primary mb-6">Security Recommendations</h3>
-          
-          <div className="space-y-4">
-            {getSecurityRecommendations().map((recommendation, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-background-tertiary/50 rounded-xl">
-                <div>
-                  <h4 className="text-sm font-semibold text-foreground-primary">{recommendation.title}</h4>
-                  <p className="text-sm text-foreground-secondary">{recommendation.description}</p>
-                </div>
-                
-                <Button size="sm" onClick={recommendation.action}>
-                  Enable
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
