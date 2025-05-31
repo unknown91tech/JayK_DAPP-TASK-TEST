@@ -1,7 +1,7 @@
 // components/TokenMinter.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 
 interface TokenMinterProps {
@@ -34,7 +34,7 @@ export default function TokenMinter({ loading, onMint, contract, account }: Toke
           setIsAuthorized(true)
           return
         }
-      } catch (err) {
+      } catch {
         console.log('No owner() function found')
       }
 
@@ -46,7 +46,7 @@ export default function TokenMinter({ loading, onMint, contract, account }: Toke
           setIsAuthorized(true)
           return
         }
-      } catch (err) {
+      } catch {
         console.log('No hasRole() function found')
       }
 
@@ -57,7 +57,7 @@ export default function TokenMinter({ loading, onMint, contract, account }: Toke
           setIsAuthorized(true)
           return
         }
-      } catch (err) {
+      } catch {
         console.log('No minters() mapping found')
       }
 
@@ -73,11 +73,11 @@ export default function TokenMinter({ loading, onMint, contract, account }: Toke
   }
 
   // Check authorization when component mounts or contract/account changes
-  useState(() => {
+  useEffect(() => {
     if (contract && account) {
       checkMintingAuthorization()
     }
-  })
+  }, [contract, account])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -95,7 +95,7 @@ export default function TokenMinter({ loading, onMint, contract, account }: Toke
       if (text.startsWith('0x') && text.length === 42) {
         setMintTo(text)
       }
-    } catch (err) {
+    } catch {
       console.log('Failed to read clipboard')
     }
   }
@@ -155,7 +155,7 @@ export default function TokenMinter({ loading, onMint, contract, account }: Toke
               </div>
               <div>
                 <p className="text-sm text-red-800 font-semibold">Minting Not Authorized</p>
-                <p className="text-xs text-red-700">You don't have permission to mint tokens</p>
+                <p className="text-xs text-red-700">You don&apos;t have permission to mint tokens</p>
               </div>
             </div>
           </div>
@@ -299,7 +299,7 @@ export default function TokenMinter({ loading, onMint, contract, account }: Toke
             <div>
               <p className="text-sm text-amber-900 font-semibold">Authorization Required</p>
               <p className="text-sm text-amber-800 mt-1 leading-relaxed">
-                Only authorized addresses can mint tokens. If you're not authorized, the transaction will fail and you'll still pay gas fees.
+                Only authorized addresses can mint tokens. If you&apos;re not authorized, the transaction will fail and you&apos;ll still pay gas fees.
               </p>
             </div>
           </div>

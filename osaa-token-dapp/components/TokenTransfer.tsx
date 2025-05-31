@@ -29,7 +29,7 @@ export default function TokenTransfer({ loading, userBalance, onTransfer }: Toke
       if (text.startsWith('0x') && text.length === 42) {
         setTransferTo(text)
       }
-    } catch (err) {
+    } catch {
       console.log('Failed to read clipboard')
     }
   }
@@ -189,7 +189,7 @@ export default function TokenTransfer({ loading, userBalance, onTransfer }: Toke
           <div>
             <p className="text-sm text-blue-900 font-semibold">Gas Fee Required</p>
             <p className="text-sm text-blue-800 mt-1 leading-relaxed">
-              You'll need ETH in your wallet to pay for transaction gas fees. The token transfer itself is free, but Ethereum network fees apply.
+              You&apos;ll need ETH in your wallet to pay for transaction gas fees. The token transfer itself is free, but Ethereum network fees apply.
             </p>
           </div>
         </div>

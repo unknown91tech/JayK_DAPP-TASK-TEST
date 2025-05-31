@@ -1,4 +1,3 @@
-// components/BalanceChecker.tsx
 'use client'
 
 import { useState } from 'react'
@@ -31,7 +30,7 @@ export default function BalanceChecker({
       if (text.startsWith('0x') && text.length === 42) {
         setCheckAddress(text)
       }
-    } catch (err) {
+    } catch {
       console.log('Failed to read clipboard')
     }
   }
@@ -44,7 +43,7 @@ export default function BalanceChecker({
     <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-6">
       <div className="flex items-center mb-6">
         <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center mr-4">
-          <span className="text-black text-lg">🔍</span>
+          <span className="text-white text-lg">🔍</span>
         </div>
         <div>
           <h3 className="text-xl font-bold text-gray-900">Balance Checker</h3>
@@ -53,7 +52,7 @@ export default function BalanceChecker({
       </div>
       
       <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-        Look up the OSAA token balance for any Ethereum address. This is a read-only operation that doesn't require gas fees.
+        Look up the OSAA token balance for any Ethereum address. This is a read-only operation that doesn&apos;t require gas fees.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -87,11 +86,11 @@ export default function BalanceChecker({
           <button
             type="submit"
             disabled={loading || !checkAddress}
-            className="flex-1 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-black font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center transform hover:scale-105 disabled:hover:scale-100"
+            className="flex-1 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center transform hover:scale-105 disabled:hover:scale-100"
           >
             {loading ? (
               <>
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>

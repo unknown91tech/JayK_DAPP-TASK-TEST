@@ -81,7 +81,7 @@ export default function StatusMessage({
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-4">
           <div className={`w-10 h-10 ${styles.iconBg} rounded-xl flex items-center justify-center flex-shrink-0`}>
-            <span className="text-black text-lg">
+            <span className="text-white text-lg">
               {styles.icon}
             </span>
           </div>
@@ -96,7 +96,7 @@ export default function StatusMessage({
                 <p className="text-sm font-semibold text-red-800 mb-2">Troubleshooting Steps:</p>
                 <ul className="text-sm text-red-700 space-y-1">
                   <li>• Make sure MetaMask is installed and unlocked</li>
-                  <li>• Check that you're connected to the correct network</li>
+                  <li>• Check that you&apos;re connected to the correct network</li>
                   <li>• Try refreshing the page and reconnecting</li>
                 </ul>
               </div>

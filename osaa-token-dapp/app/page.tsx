@@ -1,8 +1,23 @@
-// app/page.tsx - Updated with separate disconnect button
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// app/page.tsx - Production ready with proper TypeScript types
 'use client'
 
 import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
+
+// Extend Window interface to include ethereum
+interface MetaMaskEthereum {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
+  on: (event: string, handler: (...args: unknown[]) => void) => void
+  removeListener: (event: string, handler: (...args: unknown[]) => void) => void
+  isMetaMask?: boolean
+}
+
+declare global {
+  interface Window {
+    ethereum?: MetaMaskEthereum
+  }
+}
 
 // Import components
 import WalletConnector from '../components/WalletConnector'
@@ -34,6 +49,16 @@ const OSAA_ABI = [
 // Get contract address from environment
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x206e8D8856b20b198271b1C1A413D1Ff56Bbf1D1"
 
+interface NetworkInfo {
+  name: string
+  chainId: number
+}
+
+interface ErrorWithCode extends Error {
+  code?: number
+  reason?: string
+}
+
 export default function OSAATokenDApp() {
   // Core state
   const [account, setAccount] = useState<string>('')
@@ -48,7 +73,7 @@ export default function OSAATokenDApp() {
   const [checkedAddress, setCheckedAddress] = useState<string>('')
 
   // Network info state
-  const [networkInfo, setNetworkInfo] = useState<{name: string, chainId: number} | null>(null)
+  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null)
 
   // Disconnect wallet function
   const disconnectWallet = () => {
@@ -92,10 +117,10 @@ export default function OSAATokenDApp() {
       setError('')
 
       // Request account access
-      await window.ethereum.request({ method: 'eth_requestAccounts' })
+      await window.ethereum?.request({ method: 'eth_requestAccounts' })
 
       // Create provider and get signer
-      const provider = new ethers.BrowserProvider(window.ethereum)
+      const provider = new ethers.BrowserProvider(window.ethereum!)
       const signer = await provider.getSigner()
       const userAddress = await signer.getAddress()
 
@@ -113,13 +138,14 @@ export default function OSAATokenDApp() {
       // Load user balance
       await loadBalance(contractInstance, userAddress)
 
-    } catch (err: any) {
-      if (err.code === 4001) {
+    } catch (err) {
+      const error = err as ErrorWithCode
+      if (error.code === 4001) {
         setError('Connection rejected by user')
-      } else if (err.message.includes('network')) {
+      } else if (error.message?.includes('network')) {
         setError('Network error. Please check your connection and try again.')
       } else {
-        setError(`Failed to connect wallet: ${err.message}`)
+        setError(`Failed to connect wallet: ${error.message}`)
       }
     } finally {
       setLoading(false)
@@ -172,12 +198,13 @@ export default function OSAATokenDApp() {
       try {
         const gasEstimate = await contract.mint.estimateGas(mintTo, amountInWei)
         console.log('Estimated gas:', gasEstimate.toString())
-      } catch (gasErr: any) {
-        if (gasErr.message.includes('unauthorized') || gasErr.message.includes('not authorized')) {
+      } catch (gasErr) {
+        const error = gasErr as ErrorWithCode
+        if (error.message?.includes('unauthorized') || error.message?.includes('not authorized')) {
           setError('You are not authorized to mint tokens. Only the contract owner or authorized minters can mint.')
           return
         }
-        console.warn('Gas estimation failed:', gasErr.message)
+        console.warn('Gas estimation failed:', error.message)
       }
 
       // Send mint transaction
@@ -198,17 +225,18 @@ export default function OSAATokenDApp() {
         setError('Transaction failed. Please check the transaction details.')
       }
 
-    } catch (err: any) {
-      if (err.code === 4001) {
+    } catch (err) {
+      const error = err as ErrorWithCode
+      if (error.code === 4001) {
         setError('Transaction cancelled by user')
-      } else if (err.message.includes('unauthorized') || err.message.includes('not authorized')) {
+      } else if (error.message?.includes('unauthorized') || error.message?.includes('not authorized')) {
         setError('You are not authorized to mint tokens')
-      } else if (err.message.includes('insufficient funds')) {
+      } else if (error.message?.includes('insufficient funds')) {
         setError('Insufficient ETH for gas fees')
-      } else if (err.message.includes('gas')) {
+      } else if (error.message?.includes('gas')) {
         setError('Transaction failed due to gas issues. Try increasing gas limit.')
       } else {
-        setError(`Minting failed: ${err.reason || err.message}`)
+        setError(`Minting failed: ${error.reason || error.message}`)
       }
     } finally {
       setLoading(false)
@@ -264,15 +292,16 @@ export default function OSAATokenDApp() {
         setError('Transaction failed. Please check the transaction details.')
       }
 
-    } catch (err: any) {
-      if (err.code === 4001) {
+    } catch (err) {
+      const error = err as ErrorWithCode
+      if (error.code === 4001) {
         setError('Transaction cancelled by user')
-      } else if (err.message.includes('insufficient funds') || err.message.includes('transfer amount exceeds balance')) {
+      } else if (error.message?.includes('insufficient funds') || error.message?.includes('transfer amount exceeds balance')) {
         setError('Insufficient token balance for transfer')
-      } else if (err.message.includes('gas')) {
+      } else if (error.message?.includes('gas')) {
         setError('Transaction failed due to gas issues. Try increasing gas limit.')
       } else {
-        setError(`Transfer failed: ${err.reason || err.message}`)
+        setError(`Transfer failed: ${error.reason || error.message}`)
       }
     } finally {
       setLoading(false)
@@ -301,8 +330,9 @@ export default function OSAATokenDApp() {
       setCheckedBalance(formattedBalance)
       setCheckedAddress(checkAddress)
 
-    } catch (err: any) {
-      setError(`Failed to check balance: ${err.reason || err.message}`)
+    } catch (err) {
+      const error = err as ErrorWithCode
+      setError(`Failed to check balance: ${error.reason || error.message}`)
     } finally {
       setLoading(false)
     }
@@ -311,7 +341,7 @@ export default function OSAATokenDApp() {
   // Listen for account and network changes
   useEffect(() => {
     if (isMetaMaskAvailable()) {
-      const handleAccountsChanged = (accounts: string[]) => {
+      const handleAccountsChanged = (accounts: any) => {
         if (accounts.length === 0) {
           setAccount('')
           setContract(null)
@@ -325,18 +355,18 @@ export default function OSAATokenDApp() {
         }
       }
 
-      const handleChainChanged = (chainId: string) => {
+      const handleChainChanged = (chainId: any) => {
         console.log('Chain changed to:', chainId)
         // Reload the page to reset all state
         window.location.reload()
       }
 
-      window.ethereum.on('accountsChanged', handleAccountsChanged)
-      window.ethereum.on('chainChanged', handleChainChanged)
+      window.ethereum?.on('accountsChanged', handleAccountsChanged)
+      window.ethereum?.on('chainChanged', handleChainChanged)
 
       return () => {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged)
-        window.ethereum.removeListener('chainChanged', handleChainChanged)
+        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged)
+        window.ethereum?.removeListener('chainChanged', handleChainChanged)
       }
     }
   }, [contract, account])
@@ -356,9 +386,6 @@ export default function OSAATokenDApp() {
             OneStep Authentication Asset - Token Management Interface
           </p>
           <div className="flex items-center justify-center space-x-4">
-            <p className="text-sm text-gray-500 bg-white px-4 py-2 rounded-full shadow-sm">
-              Built with Next.js 15 & Ethereum • Part C Assignment
-            </p>
             {networkInfo && (
               <p className="text-sm text-blue-600 bg-blue-50 px-4 py-2 rounded-full border border-blue-200">
                 Connected to {networkInfo.name} (Chain ID: {networkInfo.chainId})
@@ -373,7 +400,7 @@ export default function OSAATokenDApp() {
             <DisconnectButton 
               account={account}
               onDisconnect={disconnectWallet}
-              variant="compact"
+              variant="default"
             />
           </div>
         )}
@@ -400,7 +427,7 @@ export default function OSAATokenDApp() {
           />
         )}
 
-        {/* Wallet Connection - Remove onDisconnect prop since we have separate button */}
+        {/* Wallet Connection */}
         <WalletConnector
           account={account}
           balance={balance}
@@ -429,6 +456,22 @@ export default function OSAATokenDApp() {
               onCheckBalance={handleCheckBalance}
               checkedBalance={checkedBalance}
               checkedAddress={checkedAddress}
+            />
+          </div>
+        )}
+
+        {/* Additional Disconnect Options */}
+        {account && (
+          <div className="flex justify-center space-x-4 mb-8">
+            <DisconnectButton 
+              account={account}
+              onDisconnect={disconnectWallet}
+              variant="compact"
+            />
+            <DisconnectButton 
+              account={account}
+              onDisconnect={disconnectWallet}
+              variant="icon-only"
             />
           </div>
         )}
