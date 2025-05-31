@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api'
-import { sessionManager } from '../utils/session'
 import { generateProfileKeyboard } from '../utils/keyboards'
 import { SUCCESS_MESSAGE, ERROR_MESSAGE } from '../utils/messages'
+import { sessionManager } from '../utils/session'
 
 export async function handleAuthCallback(bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) {
   const chatId = callbackQuery.message?.chat.id
