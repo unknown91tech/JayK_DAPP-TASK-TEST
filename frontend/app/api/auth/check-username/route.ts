@@ -19,13 +19,20 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Check availability in database
-    const available = await isUsernameAvailable(username)
-    
-    return NextResponse.json({
-      available,
-      username
-    })
+    // Check availability in database with error handling
+    try {
+      const available = await isUsernameAvailable(username)
+      return NextResponse.json({
+        available,
+        username
+      })
+    } catch (dbError) {
+      console.error('Database error during username check:', dbError)
+      return NextResponse.json(
+        { available: false, reason: 'Database temporarily unavailable' },
+        { status: 503 }
+      )
+    }
     
   } catch (error) {
     console.error('Username check error:', error)
