@@ -44,27 +44,37 @@ export default function TokenTransfer({ loading, userBalance, onTransfer }: Toke
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex items-center mb-4">
-        <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-          <span className="text-green-600 text-lg">📤</span>
+    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-6">
+      <div className="flex items-center mb-6">
+        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl flex items-center justify-center mr-4">
+          <span className="text-white text-lg">📤</span>
         </div>
-        <h3 className="text-lg font-semibold text-green-600">Transfer Tokens</h3>
+        <div>
+          <h3 className="text-xl font-bold text-gray-900">Transfer Tokens</h3>
+          <p className="text-sm text-gray-500">Send OSAA to others</p>
+        </div>
       </div>
       
-      <p className="text-sm text-gray-600 mb-4">
-        Send your OSAA tokens to another Ethereum address. Make sure you have enough tokens and ETH for gas.
+      <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+        Send your OSAA tokens to another Ethereum address. Make sure you have enough tokens and ETH for gas fees.
       </p>
 
-      <div className="mb-4 p-3 bg-green-50 rounded-md">
-        <p className="text-sm text-green-800">
-          Available Balance: <span className="font-semibold">{parseFloat(userBalance).toLocaleString()} OSAA</span>
-        </p>
+      <div className="mb-6 p-4 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+            <span className="text-emerald-600 text-sm">💰</span>
+          </div>
+          <div>
+            <p className="text-sm text-emerald-800 font-semibold">
+              Available Balance: {parseFloat(userBalance).toLocaleString()} OSAA
+            </p>
+          </div>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-semibold text-gray-800 mb-3">
             Recipient Address *
           </label>
           <div className="relative">
@@ -73,24 +83,24 @@ export default function TokenTransfer({ loading, userBalance, onTransfer }: Toke
               value={transferTo}
               onChange={(e) => setTransferTo(e.target.value)}
               placeholder="0x742d35Cc6841000fACEF9426dd9D7A4C09C9A22e"
-              className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent pr-20"
+              className="w-full p-4 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 pr-20 text-sm font-mono"
               required
             />
             <button
               type="button"
               onClick={handlePasteAddress}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors font-medium"
             >
               📋 Paste
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-gray-500 mt-2">
             Enter the destination address for the token transfer
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-semibold text-gray-800 mb-3">
             Amount (OSAA) *
           </label>
           <div className="relative">
@@ -102,48 +112,48 @@ export default function TokenTransfer({ loading, userBalance, onTransfer }: Toke
               min="0.000000000000000001"
               max={userBalance}
               step="0.000000000000000001"
-              className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent pr-16"
+              className="w-full p-4 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 pr-16 text-sm"
               required
             />
             <button
               type="button"
               onClick={setMaxAmount}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-2 rounded-lg transition-colors font-medium"
             >
               MAX
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-gray-500 mt-2">
             Amount to transfer (cannot exceed your balance)
           </p>
         </div>
 
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setPercentageAmount(25)}
-            className="px-3 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100"
+            className="px-4 py-2 text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors font-medium"
           >
             25%
           </button>
           <button
             type="button"
             onClick={() => setPercentageAmount(50)}
-            className="px-3 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100"
+            className="px-4 py-2 text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors font-medium"
           >
             50%
           </button>
           <button
             type="button"
             onClick={() => setPercentageAmount(75)}
-            className="px-3 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100"
+            className="px-4 py-2 text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors font-medium"
           >
             75%
           </button>
           <button
             type="button"
             onClick={() => setPercentageAmount(100)}
-            className="px-3 py-1 text-xs bg-green-50 text-green-600 rounded hover:bg-green-100"
+            className="px-4 py-2 text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors font-medium"
           >
             100%
           </button>
@@ -152,7 +162,7 @@ export default function TokenTransfer({ loading, userBalance, onTransfer }: Toke
         <button
           type="submit"
           disabled={loading || !transferTo || !transferAmount || parseFloat(transferAmount) > parseFloat(userBalance)}
-          className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-md transition-colors flex items-center justify-center"
+          className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center transform hover:scale-105 disabled:hover:scale-100 shadow-lg"
         >
           {loading ? (
             <>
@@ -160,21 +170,26 @@ export default function TokenTransfer({ loading, userBalance, onTransfer }: Toke
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Transferring Tokens...
+              Transferring...
             </>
           ) : (
-            '📤 Transfer Tokens'
+            <>
+              <span className="mr-2">📤</span>
+              Transfer Tokens
+            </>
           )}
         </button>
       </form>
 
-      <div className="mt-4 p-3 bg-blue-50 rounded-md">
-        <div className="flex items-start">
-          <span className="text-blue-500 mr-2">💡</span>
+      <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-sky-50 border border-blue-200 rounded-xl">
+        <div className="flex items-start space-x-3">
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-sky-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <span className="text-white text-sm">💡</span>
+          </div>
           <div>
-            <p className="text-xs text-blue-800 font-medium">Gas Fee Required</p>
-            <p className="text-xs text-blue-700 mt-1">
-              You'll need ETH in your wallet to pay for transaction gas fees. The token transfer itself is free.
+            <p className="text-sm text-blue-900 font-semibold">Gas Fee Required</p>
+            <p className="text-sm text-blue-800 mt-1 leading-relaxed">
+              You'll need ETH in your wallet to pay for transaction gas fees. The token transfer itself is free, but Ethereum network fees apply.
             </p>
           </div>
         </div>
