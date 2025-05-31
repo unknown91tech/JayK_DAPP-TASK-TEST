@@ -27,12 +27,13 @@ const publicRoutes = [
   '/setup-account',
   '/api/auth/setup-account',
   '/api/auth/passcode/verify',
-  '/setup-passcode', 
+  '/setup-passcode',  
   '/biometrics',
   '/complete-profile',
   '/api/auth/passcode/create',
   '/api/security/avv',
   '/biometric',
+  '/api/user/activity',
   
 ]
 
@@ -62,6 +63,19 @@ const protectedRoutes = [
   '/api/kyc/submit',
   '/api/kyc/status'
 ]
+
+// Helper function to get current IP address
+export async function getCurrentIpAddress(): Promise<string> {
+  try {
+    const response = await fetch('https://ipinfo.io/json');
+    const data = await response.json();
+    localStorage.setItem('x-forwarded-for', data.ip);
+    return data.ip || 'unknown';
+  } catch (error) {
+    console.error('Failed to fetch IP address:', error);
+    return 'unknown';
+  }
+}
 
 // Function to check if a path matches any pattern in an array
 function matchesRoutes(pathname: string, routes: string[]): boolean {

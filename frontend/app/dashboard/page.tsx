@@ -13,32 +13,66 @@ import {
   Calendar,
   MapPin,
   TrendingUp,
-  Zap
+  Zap,
+  AlertCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
+// TypeScript interfaces for our data structures
+interface Device {
+  id: string
+  deviceName: string
+  deviceType: string
+  createdAt: string
+  lastUsedAt: string
+  isActive: boolean
+}
+
+interface UserProfile {
+  osId: string
+  username?: string
+  email?: string
+  firstName?: string
+  lastName?: string
+  isVerified: boolean
+  kycStatus: string
+}
+
+interface DashboardStats {
+  activeDevices: number
+  maxDevices: number
+  securityScore: number
+  connectedApps: number
+  lastLogin: string
+}
+
 export default function DashboardPage() {
-  const [user, setUser] = useState<any>(null)
-  const [stats, setStats] = useState({
-    activeDevices: 2,
-    maxDevices: 5,
-    securityScore: 98,
-    connectedApps: 12,
-    lastLogin: '5/30/2025'
+  // State management for all our dashboard data
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const [devices, setDevices] = useState<Device[]>([]) // Real device data from backend
+  const [stats, setStats] = useState<DashboardStats>({
+    activeDevices: 0, // Will be calculated from actual devices
+    maxDevices: 5, // This stays constant as per business rules
+    securityScore: 98, // Could be calculated based on user's security setup
+    connectedApps: 12, // This would come from SSO sessions in a real app
+    lastLogin: '5/30/2025' // Could be from user.lastLoginAt
   })
   const [copied, setCopied] = useState(false)
   const [currentTime, setCurrentTime] = useState('')
+  const [loading, setLoading] = useState(true) // Track loading state
+  const [error, setError] = useState<string | null>(null) // Track any errors
 
   // Initialize data when component mounts
   useEffect(() => {
-    fetchUserData()
+    fetchDashboardData()
     updateTime()
     const timeInterval = setInterval(updateTime, 60000) // Update every minute
     
     return () => clearInterval(timeInterval)
   }, [])
 
+  // Update the current time display
   const updateTime = () => {
     const now = new Date()
     setCurrentTime(now.toLocaleTimeString('en-US', {
@@ -48,72 +82,169 @@ export default function DashboardPage() {
     }))
   }
 
-  const fetchUserData = async () => {
+  // Fetch all dashboard data from our APIs
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    setError(null)
+    
     try {
-      const response = await fetch('/api/user/profile', {
-        credentials: 'include'
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setUser(data.profile)
+      // Fetch user profile and devices in parallel for better performance
+      const [profileResponse, devicesResponse] = await Promise.all([
+        fetch('/api/user/profile', { credentials: 'include' }),
+        fetch('/api/user/devices', { credentials: 'include' })
+      ])
+
+      // Handle user profile response
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json()
+        setUser(profileData.profile)
+        console.log('✅ User profile loaded:', profileData.profile)
+      } else {
+        console.error('❌ Failed to fetch user profile:', profileResponse.status)
       }
+
+      // Handle devices response
+      if (devicesResponse.ok) {
+        const devicesData = await devicesResponse.json()
+        setDevices(devicesData.devices || [])
+        
+        // Update stats with real device count
+        setStats(prevStats => ({
+          ...prevStats,
+          activeDevices: devicesData.devices?.length || 0
+        }))
+        
+        console.log('✅ User devices loaded:', devicesData.devices)
+      } else {
+        console.error('❌ Failed to fetch devices:', devicesResponse.status)
+        // If we can't fetch devices, show an error but don't break the whole dashboard
+        const errorData = await devicesResponse.json().catch(() => ({}))
+        setError(errorData.error || 'Failed to load device information')
+      }
+
     } catch (error) {
-      console.error('Failed to fetch user data:', error)
+      console.error('❌ Dashboard data fetch error:', error)
+      setError('Failed to load dashboard data. Please refresh the page.')
+    } finally {
+      setLoading(false)
     }
   }
 
+  // Copy OS-ID to clipboard
   const copyOsId = async () => {
     if (user?.osId) {
       try {
         await navigator.clipboard.writeText(user.osId)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
+        console.log('📋 OS-ID copied to clipboard:', user.osId)
       } catch (error) {
-        console.error('Failed to copy OS-ID:', error)
+        console.error('❌ Failed to copy OS-ID:', error)
       }
     }
   }
 
+  // Calculate security score based on user's setup
+  const calculateSecurityScore = (): number => {
+    let score = 50 // Base score
+    
+    if (user?.isVerified) score += 20 // Account verified
+    if (devices.length > 0) score += 15 // Has registered devices
+    if (devices.length >= 2) score += 10 // Multiple devices for better security
+    if (user?.kycStatus === 'APPROVED') score += 5 // KYC completed
+    
+    return Math.min(score, 100) // Cap at 100
+  }
+
+  // Get color for security score display
   const getSecurityScoreColor = (score: number) => {
     if (score >= 90) return 'text-status-success'
     if (score >= 70) return 'text-status-warning'
     return 'text-status-error'
   }
 
+  // Get descriptive text for security score
   const getSecurityScoreText = (score: number) => {
     if (score >= 90) return 'Excellent security setup'
     if (score >= 70) return 'Good security setup'
     return 'Security needs improvement'
   }
 
-  // Recent activity data for the user
-  const recentActivities = [
-    {
-      action: 'Successful login via Telegram',
-      time: 'Just now',
-      icon: Shield,
-      color: 'text-status-success'
-    },
-    {
-      action: 'Device registered: iPhone 15',
-      time: '2 hours ago',
-      icon: Smartphone,
-      color: 'text-accent-primary'
-    },
-    {
-      action: 'Connected to new dApp',
-      time: '1 day ago',
-      icon: Users,
-      color: 'text-accent-primary'
-    },
-    {
-      action: 'Security scan completed',
-      time: '2 days ago',
-      icon: Shield,
-      color: 'text-status-success'
+  // Generate recent activity based on real device data
+  const generateRecentActivities = () => {
+    const activities = [
+      {
+        action: 'Successful login via Telegram',
+        time: 'Just now',
+        icon: Shield,
+        color: 'text-status-success'
+      }
+    ]
+
+    // Add device-related activities
+    if (devices.length > 0) {
+      const latestDevice = devices.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0]
+      
+      const deviceAge = new Date().getTime() - new Date(latestDevice.createdAt).getTime()
+      const hoursAgo = Math.floor(deviceAge / (1000 * 60 * 60))
+      
+      if (hoursAgo < 24) {
+        activities.push({
+          action: `Device registered: ${latestDevice.deviceName}`,
+          time: hoursAgo === 0 ? 'Less than an hour ago' : `${hoursAgo} hours ago`,
+          icon: Smartphone,
+          color: 'text-accent-primary'
+        })
+      }
     }
-  ]
+
+    // Add some default activities
+    activities.push(
+      {
+        action: 'Connected to new dApp',
+        time: '1 day ago',
+        icon: Users,
+        color: 'text-accent-primary'
+      },
+      {
+        action: 'Security scan completed',
+        time: '2 days ago',
+        icon: Shield,
+        color: 'text-status-success'
+      }
+    )
+
+    return activities
+  }
+
+  // Show loading state while fetching data
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary animate-pulse">
+          <div className="h-8 bg-background-tertiary rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-background-tertiary rounded w-2/3 mb-2"></div>
+          <div className="h-4 bg-background-tertiary rounded w-1/2"></div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-background-secondary rounded-2xl p-6 border border-border-primary animate-pulse">
+              <div className="h-12 w-12 bg-background-tertiary rounded-xl mb-4"></div>
+              <div className="h-6 bg-background-tertiary rounded w-1/2 mb-2"></div>
+              <div className="h-4 bg-background-tertiary rounded w-3/4"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Calculate current security score
+  const currentSecurityScore = calculateSecurityScore()
+  const recentActivities = generateRecentActivities()
 
   return (
     <div className="space-y-6">
@@ -145,10 +276,30 @@ export default function DashboardPage() {
           
           <div className="flex items-center space-x-2 px-4 py-2 bg-status-success/10 border border-status-success/20 rounded-lg">
             <CheckCircle className="w-5 h-5 text-status-success" />
-            <span className="text-sm font-medium text-status-success">Account Verified</span>
+            <span className="text-sm font-medium text-status-success">
+              {user?.isVerified ? 'Account Verified' : 'Verification Pending'}
+            </span>
           </div>
         </div>
       </div>
+
+      {/* Error Message - Show if there's an issue loading data */}
+      {error && (
+        <div className="bg-status-error/10 border border-status-error/20 rounded-2xl p-4">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-5 h-5 text-status-error" />
+            <span className="text-status-error font-medium">{error}</span>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={fetchDashboardData}
+              className="ml-auto text-status-error hover:text-status-error"
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* OneStep ID Card - Core feature */}
       <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
@@ -164,12 +315,13 @@ export default function DashboardPage() {
             <div className="bg-background-tertiary rounded-xl p-6 border border-border-primary">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-2xl font-mono font-bold text-accent-primary">
-                  {user?.osId || 'OS-2024-ABC123DEF'}
+                  {user?.osId || 'Loading...'}
                 </span>
                 <button
                   onClick={copyOsId}
                   className="p-3 hover:bg-background-primary rounded-lg transition-colors"
                   title="Copy OS-ID to clipboard"
+                  disabled={!user?.osId}
                 >
                   {copied ? (
                     <CheckCircle className="w-5 h-5 text-status-success" />
@@ -194,9 +346,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Grid - Key metrics at a glance */}
+      {/* Stats Grid - Key metrics from real data */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Active Devices Status */}
+        {/* Active Devices Status - Now using real data */}
         <Link href="/dashboard/devices">
           <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary hover:border-accent-primary/50 transition-all duration-300 cursor-pointer group hover:shadow-lg">
             <div className="flex items-center justify-between mb-4">
@@ -213,12 +365,15 @@ export default function DashboardPage() {
               Active Devices
             </div>
             <div className="text-xs text-foreground-secondary">
-              Manage your trusted devices
+              {devices.length === 0 
+                ? 'No devices registered yet' 
+                : `${devices.length} device${devices.length === 1 ? '' : 's'} trusted`
+              }
             </div>
           </div>
         </Link>
 
-        {/* Security Score */}
+        {/* Security Score - Now calculated from real data */}
         <Link href="/dashboard/security">
           <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary hover:border-accent-primary/50 transition-all duration-300 cursor-pointer group hover:shadow-lg">
             <div className="flex items-center justify-between mb-4">
@@ -228,14 +383,14 @@ export default function DashboardPage() {
               <ChevronRight className="w-5 h-5 text-foreground-tertiary group-hover:text-accent-primary transition-colors" />
             </div>
             
-            <div className={`text-2xl font-bold mb-1 ${getSecurityScoreColor(stats.securityScore)}`}>
-              {stats.securityScore}%
+            <div className={`text-2xl font-bold mb-1 ${getSecurityScoreColor(currentSecurityScore)}`}>
+              {currentSecurityScore}%
             </div>
             <div className="text-sm font-medium text-foreground-primary mb-1">
               Security Score
             </div>
             <div className="text-xs text-foreground-secondary">
-              {getSecurityScoreText(stats.securityScore)}
+              {getSecurityScoreText(currentSecurityScore)}
             </div>
           </div>
         </Link>
@@ -281,7 +436,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activity Feed */}
+      {/* Recent Activity Feed - Now includes real device data */}
       <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-semibold text-foreground-primary">
@@ -329,6 +484,11 @@ export default function DashboardPage() {
             </h4>
             <p className="text-sm text-foreground-secondary mb-4">
               Add, remove, or view your trusted devices. Keep your account secure by managing device access.
+              {devices.length > 0 && (
+                <span className="block mt-2 text-accent-primary font-medium">
+                  {devices.length} device{devices.length === 1 ? '' : 's'} currently registered
+                </span>
+              )}
             </p>
             <div className="flex items-center text-accent-primary group-hover:text-accent-hover transition-colors">
               <span className="text-sm font-medium">Manage Devices</span>
@@ -347,6 +507,9 @@ export default function DashboardPage() {
             </h4>
             <p className="text-sm text-foreground-secondary mb-4">
               Review and update your security preferences. Monitor suspicious activity and enhance protection.
+              <span className="block mt-2 text-status-success font-medium">
+                Current score: {currentSecurityScore}%
+              </span>
             </p>
             <div className="flex items-center text-accent-primary group-hover:text-accent-hover transition-colors">
               <span className="text-sm font-medium">View Security</span>
@@ -365,6 +528,17 @@ export default function DashboardPage() {
             </h4>
             <p className="text-sm text-foreground-secondary mb-4">
               Check your KYC verification status and complete any pending verification requirements.
+              {user?.kycStatus && (
+                <span className="block mt-2 font-medium capitalize">
+                  Status: <span className={
+                    user.kycStatus === 'APPROVED' ? 'text-status-success' :
+                    user.kycStatus === 'IN_PROGRESS' ? 'text-status-warning' :
+                    'text-status-error'
+                  }>
+                    {user.kycStatus.replace('_', ' ').toLowerCase()}
+                  </span>
+                </span>
+              )}
             </p>
             <div className="flex items-center text-accent-primary group-hover:text-accent-hover transition-colors">
               <span className="text-sm font-medium">Check Status</span>
@@ -373,6 +547,29 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
+
+      {/* Debug Panel - Shows device information in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-blue-900/20 border border-blue-500/30 rounded-2xl p-4">
+          <h4 className="text-sm font-bold text-blue-400 mb-2">🔧 Development Debug Info</h4>
+          <div className="text-xs text-blue-300 space-y-1">
+            <p>📊 Active Devices: {devices.length}/{stats.maxDevices}</p>
+            <p>🔒 Security Score: {currentSecurityScore}% (calculated from user data)</p>
+            <p>✅ Account Verified: {user?.isVerified ? 'Yes' : 'No'}</p>
+            <p>📋 KYC Status: {user?.kycStatus || 'Unknown'}</p>
+            {devices.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-blue-500/30">
+                <p className="text-blue-400 font-medium">Registered Devices:</p>
+                {devices.map(device => (
+                  <p key={device.id} className="ml-2">
+                    • {device.deviceName} ({device.deviceType}) - {new Date(device.lastUsedAt).toLocaleDateString()}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

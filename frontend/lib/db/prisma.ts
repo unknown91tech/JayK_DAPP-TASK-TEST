@@ -12,6 +12,18 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
+// Helper function to get current IP address
+export async function getCurrentIpAddress(): Promise<string> {
+  try {
+    const response = await fetch('https://ipinfo.io/json');
+    const data = await response.json();
+    return data.ip || 'unknown';
+  } catch (error) {
+    console.error('Failed to fetch IP address:', error);
+    return 'unknown';
+  }
+}
+
 // Helper function to generate unique OS-ID (OneStep ID)
 export function generateOsId(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -88,13 +100,15 @@ interface SecurityLogData {
 
 export async function logSecurityEvent(data: SecurityLogData) {
   try {
+    // Get current IP address if not provided
+    const ipAddress =  await getCurrentIpAddress();
     await prisma.securityLog.create({
       data: {
         userId: data.userId,
         eventType: data.eventType,
         description: data.description,
         metadata: data.metadata || {},
-        ipAddress: data.ipAddress,
+        ipAddress: ipAddress,
         userAgent: data.userAgent,
         deviceId: data.deviceId,
         riskLevel: data.riskLevel || 'LOW'

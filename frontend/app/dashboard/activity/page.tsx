@@ -20,11 +20,14 @@ import {
   Lock,
   Unlock,
   Users,
-  RefreshCw
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
+// Type definitions for our activity data
 interface ActivityEvent {
   id: string
   eventType: string
@@ -36,6 +39,18 @@ interface ActivityEvent {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
   success: boolean
   metadata?: any
+  user?: {
+    osId: string
+    username?: string
+  }
+}
+
+interface ActivitySummary {
+  total: number
+  successful: number
+  failed: number
+  highRisk: number
+  recent24h: number
 }
 
 interface ActivityFilters {
@@ -43,185 +58,249 @@ interface ActivityFilters {
   riskLevel: string
   dateRange: string
   searchTerm: string
+  username: string // New filter for specific username
+}
+
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
 }
 
 export default function ActivityPage() {
+  // State management for the page
   const [activities, setActivities] = useState<ActivityEvent[]>([])
-  const [filteredActivities, setFilteredActivities] = useState<ActivityEvent[]>([])
+  const [summary, setSummary] = useState<ActivitySummary>({
+    total: 0,
+    successful: 0,
+    failed: 0,
+    highRisk: 0,
+    recent24h: 0
+  })
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0
+  })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [currentUsername, setCurrentUsername] = useState<string>('')
+  
+  // Filter states
   const [filters, setFilters] = useState<ActivityFilters>({
     eventType: 'all',
     riskLevel: 'all',
     dateRange: '30',
-    searchTerm: ''
+    searchTerm: '',
+    username: '' // Will be populated from localStorage
   })
   const [showFilters, setShowFilters] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<ActivityEvent | null>(null)
 
+  // Get username from localStorage when component mounts
   useEffect(() => {
-    fetchActivityLogs()
+    const storedUsername = localStorage.getItem('username')
+    console.log('👤 Found username in localStorage:', storedUsername)
+    
+    if (storedUsername) {
+      setCurrentUsername(storedUsername)
+      setFilters(prev => ({ ...prev, username: storedUsername }))
+    } else {
+      console.log('⚠️ No username found in localStorage')
+      setError('No username found in localStorage. Please log in first.')
+    }
   }, [])
 
+  // Load activity logs when component mounts or filters change
   useEffect(() => {
-    applyFilters()
-  }, [activities, filters])
+    // Only fetch if we have a username (either from localStorage or manually entered)
+    if (filters.username) {
+      fetchActivityLogs()
+    }
+  }, [filters, pagination.page])
 
+  // Function to fetch activity logs from our API
   const fetchActivityLogs = async () => {
+    // Don't fetch if no username is available
+    if (!filters.username) {
+      setError('Username is required to fetch activity logs')
+      setLoading(false)
+      return
+    }
+
     try {
-      // Mock data - in a real app, this would come from an API
-      const mockActivities: ActivityEvent[] = [
-        {
-          id: '1',
-          eventType: 'LOGIN_SUCCESS',
-          description: 'Successful login via Telegram',
-          timestamp: new Date().toISOString(),
-          ipAddress: '103.120.45.123',
-          deviceInfo: 'Chrome 120 on MacOS Sonoma',
-          location: 'Mumbai, Maharashtra, IN',
-          riskLevel: 'LOW',
-          success: true,
-          metadata: { loginMethod: 'telegram', sessionDuration: '2h 15m' }
-        },
-        {
-          id: '2',
-          eventType: 'PASSCODE_CHANGE',
-          description: 'Passcode updated successfully',
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '103.120.45.123',
-          deviceInfo: 'Chrome 120 on MacOS Sonoma',
-          location: 'Mumbai, Maharashtra, IN',
-          riskLevel: 'LOW',
-          success: true,
-          metadata: { previousCodeChanged: '2 months ago' }
-        },
-        {
-          id: '3',
-          eventType: 'DEVICE_REGISTERED',
-          description: 'New device registered: iPhone 15 Pro',
-          timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '103.120.45.124',
-          deviceInfo: 'Safari 17 on iOS 17.2',
-          location: 'Mumbai, Maharashtra, IN',
-          riskLevel: 'MEDIUM',
-          success: true,
-          metadata: { deviceName: 'iPhone 15 Pro', fingerprint: 'abc123...' }
-        },
-        {
-          id: '4',
-          eventType: 'LOGIN_FAILED',
-          description: 'Failed login attempt - Invalid OTP',
-          timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '45.123.67.89',
-          deviceInfo: 'Firefox 119 on Windows 11',
-          location: 'Unknown Location',
-          riskLevel: 'HIGH',
-          success: false,
-          metadata: { attempts: 3, reason: 'Invalid OTP code' }
-        },
-        {
-          id: '5',
-          eventType: 'PROFILE_UPDATE',
-          description: 'Profile information updated',
-          timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '103.120.45.123',
-          deviceInfo: 'Chrome 120 on MacOS Sonoma',
-          location: 'Mumbai, Maharashtra, IN',
-          riskLevel: 'LOW',
-          success: true,
-          metadata: { fieldsUpdated: ['firstName', 'email'] }
-        },
-        {
-          id: '6',
-          eventType: 'SSO_AUTH',
-          description: 'Connected to DeFi dApp',
-          timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '103.120.45.123',
-          deviceInfo: 'Chrome 120 on MacOS Sonoma',
-          location: 'Mumbai, Maharashtra, IN',
-          riskLevel: 'LOW',
-          success: true,
-          metadata: { dappName: 'UniSwap V4', permissions: ['profile', 'wallet'] }
-        },
-        {
-          id: '7',
-          eventType: 'BIOMETRIC_SETUP',
-          description: 'Touch ID authentication enabled',
-          timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-          ipAddress: '103.120.45.124',
-          deviceInfo: 'Safari 17 on iOS 17.2',
-          location: 'Mumbai, Maharashtra, IN',
-          riskLevel: 'LOW',
-          success: true,
-          metadata: { biometricType: 'touch', deviceId: 'iPhone-15-Pro' }
+      setLoading(true)
+      setError(null)
+
+      // Build query parameters for the API call
+      const queryParams = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        username: filters.username // Always include username from localStorage or input
+      })
+
+      // Add other filters to query if they're not 'all'
+      if (filters.eventType && filters.eventType !== 'all') {
+        queryParams.append('eventType', filters.eventType)
+      }
+      if (filters.riskLevel && filters.riskLevel !== 'all') {
+        queryParams.append('riskLevel', filters.riskLevel)
+      }
+      if (filters.dateRange && filters.dateRange !== '0') {
+        queryParams.append('dateRange', filters.dateRange)
+      }
+      if (filters.searchTerm) {
+        queryParams.append('searchTerm', filters.searchTerm)
+      }
+
+      console.log('🔍 Fetching activity logs with params:', queryParams.toString())
+
+      // Make the API call to fetch activity logs
+      const response = await fetch(`/api/user/activity?${queryParams}`, {
+        method: 'GET',
+        credentials: 'include' // Include cookies for authentication
+      })
+
+      console.log('📡 API Response status:', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ API Error:', errorText)
+        throw new Error(`Failed to fetch activity logs: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('📦 API Response data:', data)
+
+      if (data.success) {
+        // Update state with the fetched data
+        setActivities(data.data.activities)
+        setSummary(data.data.summary)
+        setPagination(prev => ({
+          ...prev,
+          ...data.data.pagination
+        }))
+        
+        console.log('✅ Successfully loaded', data.data.activities.length, 'activities for user:', filters.username)
+        
+        // Show which user's logs we're viewing
+        if (data.data.targetUser) {
+          console.log('👤 Viewing logs for user:', data.data.targetUser.username || data.data.targetUser.osId)
         }
-      ]
+      } else {
+        throw new Error(data.error || 'Failed to fetch activity logs')
+      }
+
+    } catch (err) {
+      console.error('Failed to fetch activity logs:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load activity logs')
       
-      setActivities(mockActivities)
-    } catch (error) {
-      console.error('Failed to fetch activity logs:', error)
+      // Show fallback data in case of error (for development)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🚧 Using fallback data for development')
+        setFallbackData()
+      }
     } finally {
       setLoading(false)
     }
   }
 
-  const applyFilters = () => {
-    let filtered = [...activities]
-
-    // Filter by event type
-    if (filters.eventType !== 'all') {
-      filtered = filtered.filter(activity => activity.eventType === filters.eventType)
-    }
-
-    // Filter by risk level
-    if (filters.riskLevel !== 'all') {
-      filtered = filtered.filter(activity => activity.riskLevel === filters.riskLevel)
-    }
-
-    // Filter by date range
-    const now = new Date()
-    const daysAgo = parseInt(filters.dateRange)
-    if (daysAgo > 0) {
-      const cutoffDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
-      filtered = filtered.filter(activity => new Date(activity.timestamp) >= cutoffDate)
-    }
-
-    // Filter by search term
-    if (filters.searchTerm) {
-      const searchLower = filters.searchTerm.toLowerCase()
-      filtered = filtered.filter(activity =>
-        activity.description.toLowerCase().includes(searchLower) ||
-        activity.ipAddress.includes(searchLower) ||
-        activity.location.toLowerCase().includes(searchLower)
-      )
-    }
-
-    setFilteredActivities(filtered)
+  // Fallback data for development when API fails
+  const setFallbackData = () => {
+    const mockActivities: ActivityEvent[] = [
+      {
+        id: '1',
+        eventType: 'LOGIN_SUCCESS',
+        description: 'Successful login via Telegram',
+        timestamp: new Date().toISOString(),
+        ipAddress: '103.120.45.123',
+        deviceInfo: 'Chrome 120 on MacOS Sonoma',
+        location: 'Mumbai, Maharashtra, IN',
+        riskLevel: 'LOW',
+        success: true,
+        metadata: { loginMethod: 'telegram', sessionDuration: '2h 15m' }
+      },
+      {
+        id: '2',
+        eventType: 'PASSCODE_CHANGE',
+        description: 'Passcode updated successfully',
+        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        ipAddress: '103.120.45.123',
+        deviceInfo: 'Chrome 120 on MacOS Sonoma',
+        location: 'Mumbai, Maharashtra, IN',
+        riskLevel: 'LOW',
+        success: true,
+        metadata: { previousCodeChanged: '2 months ago' }
+      },
+      {
+        id: '3',
+        eventType: 'LOGIN_FAILED',
+        description: 'Failed login attempt - Invalid OTP',
+        timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+        ipAddress: '45.123.67.89',
+        deviceInfo: 'Firefox 119 on Windows 11',
+        location: 'Unknown Location',
+        riskLevel: 'HIGH',
+        success: false,
+        metadata: { attempts: 3, reason: 'Invalid OTP code' }
+      }
+    ]
+    
+    setActivities(mockActivities)
+    setSummary({
+      total: mockActivities.length,
+      successful: mockActivities.filter(a => a.success).length,
+      failed: mockActivities.filter(a => !a.success).length,
+      highRisk: mockActivities.filter(a => a.riskLevel === 'HIGH' || a.riskLevel === 'CRITICAL').length,
+      recent24h: mockActivities.length
+    })
   }
 
+  // Update filter and reset to first page
   const updateFilter = (key: keyof ActivityFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
+    setPagination(prev => ({ ...prev, page: 1 }))
   }
 
+  // Handle page changes
+  const changePage = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
+  }
+
+  // Export activity report as CSV
   const exportActivityReport = async () => {
-    // In a real app, this would generate and download a CSV/PDF report
-    const csvContent = [
-      'Timestamp,Event Type,Description,IP Address,Device,Location,Risk Level,Success',
-      ...filteredActivities.map(activity => 
-        `${activity.timestamp},${activity.eventType},${activity.description},${activity.ipAddress},${activity.deviceInfo},${activity.location},${activity.riskLevel},${activity.success}`
-      )
-    ].join('\n')
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `activity-report-${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    try {
+      // Create CSV content from current activities
+      const csvContent = [
+        'Timestamp,Event Type,Description,User,IP Address,Device,Location,Risk Level,Success',
+        ...activities.map(activity => 
+          `"${activity.timestamp}","${activity.eventType}","${activity.description}","${activity.user ? (activity.user.username || activity.user.osId) : 'N/A'}","${activity.ipAddress}","${activity.deviceInfo}","${activity.location}","${activity.riskLevel}","${activity.success}"`
+        )
+      ].join('\n')
+      
+      // Create filename based on whether we're filtering by username
+      const baseFilename = filters.username 
+        ? `activity-report-${filters.username}-${new Date().toISOString().split('T')[0]}.csv`
+        : `activity-report-${new Date().toISOString().split('T')[0]}.csv`
+      
+      // Create and download the file
+      const blob = new Blob([csvContent], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = baseFilename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to export report:', err)
+    }
   }
 
+  // Get appropriate icon for each event type
   const getEventIcon = (eventType: string) => {
     switch (eventType) {
       case 'LOGIN_SUCCESS':
@@ -244,6 +323,7 @@ export default function ActivityPage() {
     }
   }
 
+  // Get color classes for risk levels
   const getRiskLevelColor = (level: string) => {
     switch (level) {
       case 'LOW': return 'text-status-success'
@@ -264,6 +344,7 @@ export default function ActivityPage() {
     }
   }
 
+  // Format timestamp in a human-readable way
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
     const now = new Date()
@@ -282,16 +363,53 @@ export default function ActivityPage() {
     })
   }
 
+  // Convert event type from API format to display format
   const getEventTypeLabel = (eventType: string) => {
     return eventType.split('_').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ')
   }
 
+  // Show loading spinner while fetching data
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin w-8 h-8 border-4 border-accent-primary border-t-transparent rounded-full"></div>
+        <span className="ml-3 text-foreground-secondary">
+          {filters.username ? `Loading activity logs for ${filters.username}...` : 'Loading...'}
+        </span>
+      </div>
+    )
+  }
+
+  // Show error state if data fetch failed or no username
+  if (error && activities.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <AlertTriangle className="w-12 h-12 text-status-error mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-foreground-primary mb-2">
+          {error.includes('localStorage') ? 'No Username Found' : 'Failed to Load Activity Logs'}
+        </h3>
+        <p className="text-foreground-secondary mb-4">{error}</p>
+        <div className="flex justify-center space-x-3">
+          <Button onClick={fetchActivityLogs} variant="primary" disabled={!filters.username}>
+            Try Again
+          </Button>
+          {error.includes('localStorage') && (
+            <Button 
+              onClick={() => {
+                const username = prompt('Enter username manually:')
+                if (username) {
+                  setFilters(prev => ({ ...prev, username }))
+                  setCurrentUsername(username)
+                }
+              }} 
+              variant="secondary"
+            >
+              Enter Username Manually
+            </Button>
+          )}
+        </div>
       </div>
     )
   }
@@ -301,23 +419,42 @@ export default function ActivityPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground-primary">Activity Logs</h1>
-          <p className="text-foreground-secondary">Monitor all account activity and security events</p>
+          <h1 className="text-2xl font-bold text-foreground-primary">
+            Activity Logs
+            {currentUsername && (
+              <span className="text-lg font-normal text-accent-primary ml-2">
+                - {currentUsername}
+              </span>
+            )}
+          </h1>
+          <p className="text-foreground-secondary">
+            {currentUsername 
+              ? `Viewing security activity logs for: ${currentUsername}`
+              : "Please log in to view your activity logs"
+            }
+          </p>
+          {currentUsername && (
+            <p className="text-xs text-foreground-tertiary mt-1">
+              Username loaded from localStorage
+            </p>
+          )}
         </div>
         
         <div className="flex items-center space-x-3">
           <Button 
             variant="secondary" 
             onClick={fetchActivityLogs}
+            disabled={loading || !filters.username}
             className="flex items-center space-x-2"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </Button>
           
           <Button 
             variant="secondary" 
             onClick={exportActivityReport}
+            disabled={activities.length === 0}
             className="flex items-center space-x-2"
           >
             <Download className="w-4 h-4" />
@@ -326,7 +463,7 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      {/* Activity Summary */}
+      {/* Activity Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
           <div className="flex items-center space-x-3 mb-3">
@@ -335,7 +472,7 @@ export default function ActivityPage() {
             </div>
             <div>
               <div className="text-2xl font-bold text-foreground-primary">
-                {activities.filter(a => a.success).length}
+                {summary.successful}
               </div>
               <div className="text-sm text-foreground-secondary">Successful</div>
             </div>
@@ -349,7 +486,7 @@ export default function ActivityPage() {
             </div>
             <div>
               <div className="text-2xl font-bold text-foreground-primary">
-                {activities.filter(a => !a.success).length}
+                {summary.failed}
               </div>
               <div className="text-sm text-foreground-secondary">Failed</div>
             </div>
@@ -363,7 +500,7 @@ export default function ActivityPage() {
             </div>
             <div>
               <div className="text-2xl font-bold text-foreground-primary">
-                {activities.filter(a => a.riskLevel === 'HIGH' || a.riskLevel === 'CRITICAL').length}
+                {summary.highRisk}
               </div>
               <div className="text-sm text-foreground-secondary">High Risk</div>
             </div>
@@ -376,14 +513,14 @@ export default function ActivityPage() {
               <Clock className="w-5 h-5 text-accent-primary" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-foreground-primary">24h</div>
-              <div className="text-sm text-foreground-secondary">Recent</div>
+              <div className="text-2xl font-bold text-foreground-primary">{summary.recent24h}</div>
+              <div className="text-sm text-foreground-secondary">Recent 24h</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters Section */}
       <div className="bg-background-secondary rounded-2xl p-6 border border-border-primary">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-foreground-primary">Filter Activities</h3>
@@ -399,17 +536,45 @@ export default function ActivityPage() {
           </Button>
         </div>
 
-        {/* Search */}
-        <div className="mb-4">
-          <Input
-            placeholder="Search activities..."
-            value={filters.searchTerm}
-            onChange={(e) => updateFilter('searchTerm', e.target.value)}
-            startIcon={<Search className="w-4 h-4" />}
-          />
+        {/* Search Bar */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          {/* Username Filter */}
+          <div>
+            <Input
+              placeholder="Username (auto-loaded from localStorage)"
+              value={filters.username}
+              onChange={(e) => updateFilter('username', e.target.value)}
+              startIcon={<User className="w-4 h-4" />}
+              label="Current User"
+            />
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs text-foreground-tertiary">
+                {currentUsername ? '✅ Auto-loaded from localStorage' : '❌ No username in localStorage'}
+              </p>
+              {currentUsername && filters.username !== currentUsername && (
+                <button
+                  onClick={() => setFilters(prev => ({ ...prev, username: currentUsername }))}
+                  className="text-xs text-accent-primary hover:text-accent-hover"
+                >
+                  Reset to {currentUsername}
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* General Search */}
+          <div>
+            <Input
+              placeholder="Search activities, IP addresses, or devices..."
+              value={filters.searchTerm}
+              onChange={(e) => updateFilter('searchTerm', e.target.value)}
+              startIcon={<Search className="w-4 h-4" />}
+              label="Search Activities"
+            />
+          </div>
         </div>
 
-        {/* Filter Options */}
+        {/* Advanced Filters */}
         {showFilters && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -474,22 +639,24 @@ export default function ActivityPage() {
         <div className="p-6 border-b border-border-primary">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-foreground-primary">
-              Recent Activity ({filteredActivities.length})
+              Recent Activity ({summary.total} total)
             </h3>
           </div>
         </div>
 
         <div className="divide-y divide-border-primary">
-          {filteredActivities.length === 0 ? (
+          {activities.length === 0 ? (
             <div className="p-12 text-center">
               <Activity className="w-12 h-12 text-foreground-tertiary mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-foreground-primary mb-2">No Activities Found</h3>
               <p className="text-foreground-secondary">
-                No activities match your current filter criteria.
+                {filters.searchTerm || filters.eventType !== 'all' || filters.riskLevel !== 'all'
+                  ? 'No activities match your current filter criteria.'
+                  : 'No activity logs available for your account.'}
               </p>
             </div>
           ) : (
-            filteredActivities.map((activity) => {
+            activities.map((activity) => {
               const EventIcon = getEventIcon(activity.eventType)
               
               return (
@@ -530,6 +697,15 @@ export default function ActivityPage() {
                               <span>{activity.ipAddress}</span>
                             </div>
                             <span>{activity.location}</span>
+                            {/* Show user info if available (for all logs view) */}
+                            {activity.user && (
+                              <div className="flex items-center space-x-1">
+                                <User className="w-3 h-3" />
+                                <span className="font-medium text-accent-primary">
+                                  {activity.user.username || activity.user.osId}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           
                           <div className="text-xs text-foreground-tertiary mt-1">
@@ -557,6 +733,69 @@ export default function ActivityPage() {
             })
           )}
         </div>
+
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <div className="p-6 border-t border-border-primary">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-foreground-secondary">
+                Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
+                {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+                {pagination.total} activities
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => changePage(pagination.page - 1)}
+                  disabled={pagination.page === 1}
+                  className="flex items-center space-x-1"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Previous</span>
+                </Button>
+                
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                    const pageNum = pagination.page <= 3 
+                      ? i + 1 
+                      : pagination.page >= pagination.totalPages - 2
+                        ? pagination.totalPages - 4 + i
+                        : pagination.page - 2 + i
+                    
+                    if (pageNum < 1 || pageNum > pagination.totalPages) return null
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => changePage(pageNum)}
+                        className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+                          pageNum === pagination.page
+                            ? 'bg-accent-primary text-background-primary'
+                            : 'text-foreground-secondary hover:bg-background-tertiary'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })}
+                </div>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => changePage(pagination.page + 1)}
+                  disabled={pagination.page === pagination.totalPages}
+                  className="flex items-center space-x-1"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Event Detail Modal */}
@@ -569,6 +808,7 @@ export default function ActivityPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setSelectedEvent(null)}
+                className="text-foreground-secondary hover:text-foreground-primary"
               >
                 ✕
               </Button>
@@ -580,25 +820,25 @@ export default function ActivityPage() {
                 <h4 className="text-sm font-semibold text-foreground-primary mb-3">Overview</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-xs text-foreground-tertiary">Event Type</div>
+                    <div className="text-xs text-foreground-tertiary mb-1">Event Type</div>
                     <div className="text-sm font-medium text-foreground-primary">
                       {getEventTypeLabel(selectedEvent.eventType)}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-foreground-tertiary">Risk Level</div>
+                    <div className="text-xs text-foreground-tertiary mb-1">Risk Level</div>
                     <div className={`text-sm font-medium ${getRiskLevelColor(selectedEvent.riskLevel)}`}>
                       {selectedEvent.riskLevel}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-foreground-tertiary">Status</div>
+                    <div className="text-xs text-foreground-tertiary mb-1">Status</div>
                     <div className={`text-sm font-medium ${selectedEvent.success ? 'text-status-success' : 'text-status-error'}`}>
                       {selectedEvent.success ? 'Success' : 'Failed'}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-foreground-tertiary">Timestamp</div>
+                    <div className="text-xs text-foreground-tertiary mb-1">Timestamp</div>
                     <div className="text-sm font-medium text-foreground-primary">
                       {new Date(selectedEvent.timestamp).toLocaleString()}
                     </div>
@@ -611,31 +851,79 @@ export default function ActivityPage() {
                 <h4 className="text-sm font-semibold text-foreground-primary mb-3">Location & Device</h4>
                 <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <div className="text-xs text-foreground-tertiary">IP Address</div>
-                    <div className="text-sm font-medium text-foreground-primary">{selectedEvent.ipAddress}</div>
+                    <div className="text-xs text-foreground-tertiary mb-1">IP Address</div>
+                    <div className="text-sm font-medium text-foreground-primary font-mono">
+                      {selectedEvent.ipAddress}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-xs text-foreground-tertiary">Location</div>
-                    <div className="text-sm font-medium text-foreground-primary">{selectedEvent.location}</div>
+                    <div className="text-xs text-foreground-tertiary mb-1">Location</div>
+                    <div className="text-sm font-medium text-foreground-primary">
+                      {selectedEvent.location}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-xs text-foreground-tertiary">Device</div>
-                    <div className="text-sm font-medium text-foreground-primary">{selectedEvent.deviceInfo}</div>
+                    <div className="text-xs text-foreground-tertiary mb-1">Device Information</div>
+                    <div className="text-sm font-medium text-foreground-primary">
+                      {selectedEvent.deviceInfo}
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Metadata */}
-              {selectedEvent.metadata && (
+              {selectedEvent.metadata && Object.keys(selectedEvent.metadata).length > 0 && (
                 <div>
                   <h4 className="text-sm font-semibold text-foreground-primary mb-3">Additional Details</h4>
                   <div className="bg-background-tertiary rounded-xl p-4">
-                    <pre className="text-xs text-foreground-secondary whitespace-pre-wrap">
+                    <pre className="text-xs text-foreground-secondary whitespace-pre-wrap overflow-x-auto">
                       {JSON.stringify(selectedEvent.metadata, null, 2)}
                     </pre>
                   </div>
                 </div>
               )}
+
+              {/* Actions */}
+              <div className="flex justify-end space-x-3 pt-4 border-t border-border-primary">
+                <Button
+                  variant="secondary"
+                  onClick={() => setSelectedEvent(null)}
+                >
+                  Close
+                </Button>
+                {selectedEvent.riskLevel === 'HIGH' || selectedEvent.riskLevel === 'CRITICAL' ? (
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      // In a real app, this would trigger security actions
+                      console.log('Investigating high-risk event:', selectedEvent.id)
+                      alert('Security team has been notified of this high-risk event.')
+                    }}
+                  >
+                    Report Security Issue
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Development Debug Panel */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-8 p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+          <h4 className="text-sm font-bold text-blue-400 mb-2">🔧 Development Debug Info</h4>
+          <div className="text-xs text-blue-300 space-y-1">
+            <p><strong>Username from localStorage:</strong> <code className="bg-blue-800/50 px-1 rounded">{currentUsername || 'Not found'}</code></p>
+            <p><strong>Current filter username:</strong> <code className="bg-blue-800/50 px-1 rounded">{filters.username || 'Empty'}</code></p>
+            <p><strong>API Endpoint:</strong> <code className="bg-blue-800/50 px-1 rounded">/api/user/activity?username={filters.username}</code></p>
+            <p><strong>Activities loaded:</strong> <code className="bg-blue-800/50 px-1 rounded">{activities.length}</code></p>
+            <p><strong>Current Filters:</strong> <code className="bg-blue-800/50 px-1 rounded">{JSON.stringify(filters)}</code></p>
+            {error && <p className="text-red-400"><strong>Error:</strong> {error}</p>}
+            <div className="mt-3 pt-2 border-t border-blue-500/30">
+              <p className="text-yellow-400">💡 To test different users:</p>
+              <p className="text-xs">1. Change username in the input field above</p>
+              <p className="text-xs">2. Or run: <code className="bg-blue-800/50 px-1 rounded">localStorage.setItem('username', 'new_username')</code></p>
             </div>
           </div>
         </div>
