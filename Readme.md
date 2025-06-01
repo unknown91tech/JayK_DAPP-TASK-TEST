@@ -3,9 +3,23 @@
 A comprehensive, multi-layered authentication system built with Next.js 15, featuring social login (Telegram), biometric authentication, passcode security, and SSO capabilities for dApps.
 
 ## Deployed Link:
+
+### One Step Authentication
+
 ```
+
 https://one-step-one.vercel.app/
+
 ``` 
+
+### OsAA Token Dapp
+
+```
+
+https://test6-day6-for-me-pf6g.vercel.app/
+
+```
+
 
 ## 🚀 Features
 
