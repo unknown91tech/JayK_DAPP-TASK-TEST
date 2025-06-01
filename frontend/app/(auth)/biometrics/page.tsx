@@ -17,7 +17,7 @@ import {
 
 // Types for biometric setup
 interface BiometricMethod {
-  id: 'fingerprint' | 'face'
+  id: 'touch' | 'face'
   name: string
   icon: React.ComponentType<any>
   description: string
@@ -42,7 +42,7 @@ export default function BiometricsSetupPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState<SetupStep>('choose')
-  const [selectedMethod, setSelectedMethod] = useState<'fingerprint' | 'face' | null>(null)
+  const [selectedMethod, setSelectedMethod] = useState<'touch' | 'face' | null>(null)
   const [registrationProgress, setRegistrationProgress] = useState(0)
   const [isWebAuthnSupported, setIsWebAuthnSupported] = useState(false)
   
@@ -52,7 +52,7 @@ export default function BiometricsSetupPage() {
   // Available biometric methods based on device capabilities
   const [biometricMethods, setBiometricMethods] = useState<BiometricMethod[]>([
     {
-      id: 'fingerprint',
+      id: 'touch',
       name: 'Touch ID / Fingerprint',
       icon: Fingerprint,
       description: 'Use your fingerprint to securely access your account',
@@ -287,12 +287,12 @@ export default function BiometricsSetupPage() {
       const isAndroid = /android/.test(userAgent)
 
       setBiometricMethods(methods => methods.map(method => {
-        if (method.id === 'fingerprint') {
+        if (method.id === 'touch') {
           // Touch ID is available on Apple devices, fingerprint on Android, Windows Hello on Windows
           return {
             ...method,
             isAvailable: isApple || isAndroid || isWindows,
-            name: isApple ? 'Touch ID' : isAndroid ? 'Fingerprint' : 'Windows Hello'
+            name: isApple ? 'Touch ID' : isAndroid ? 'touch' : 'Windows Hello'
           }
         }
         if (method.id === 'face') {
@@ -315,7 +315,7 @@ export default function BiometricsSetupPage() {
   }
 
   // Function to handle biometric method selection
-  const handleMethodSelection = (methodId: 'fingerprint' | 'face') => {
+  const handleMethodSelection = (methodId: 'touch' | 'face') => {
     console.log(`👆 User selected ${methodId} biometric method`)
     setSelectedMethod(methodId)
     setCurrentStep('scanning')
@@ -325,7 +325,7 @@ export default function BiometricsSetupPage() {
   }
 
   // Real biometric registration function (enhanced from login.tsx implementation)
-  const startBiometricRegistration = async (method: 'fingerprint' | 'face') => {
+  const startBiometricRegistration = async (method: 'touch' | 'face') => {
     console.log(`🔐 Starting ${method} registration...`)
     setLoading(true)
     setRegistrationProgress(0)
@@ -337,93 +337,120 @@ export default function BiometricsSetupPage() {
         throw new Error('Biometric authentication is not supported in this browser.')
       }
 
-      setSuccess(`Setting up ${method === 'fingerprint' ? 'Touch ID' : 'Face ID'}...`)
-      setRegistrationProgress(25)
-
-      // If we don't have user data, try to load it first
-      let currentUserData = userData
-      if (!currentUserData) {
-        console.log('🔍 No user data available, checking session...')
-        currentUserData = await loadUserData()
-        if (currentUserData) {
-          setUserData(currentUserData)
+      let username = userData?.username || getUsernameFromStorage()
+      
+      if (!username) {
+        console.log('🔍 No username in state/storage, checking session...')
+        const sessionData = await loadUserData()
+        if (sessionData?.username) {
+          username = sessionData.username
+          setUserData(sessionData)
+        } else {
+          throw new Error('Username not found. Please log in using Telegram first.')
         }
       }
 
-      // Get username from session or localStorage
-      const username = currentUserData?.username || getUsernameFromStorage() || 'telegram_1694779369'
-      const displayName = currentUserData?.username || 'OneStep User'
-      const userId = currentUserData?.osId || 'telegram_1694779369'
-
-      console.log('👤 Using username from session/localStorage:', username)
-      setRegistrationProgress(50)
-
-      // Create the WebAuthn credential for registration (simplified approach for demo)
-      const publicKey: PublicKeyCredentialCreationOptions = {
-        challenge: new Uint8Array([1, 2, 3, 4, 5]), // In production: get this from server
-        rp: { 
-          name: "OneStep",
-          id: "localhost" // In production: your domain
-        },
-        user: {
-          id: new TextEncoder().encode(userId), // Use OS-ID or username as user ID
-          name: username,
-          displayName: displayName
-        },
-        pubKeyCredParams: [
-          { type: "public-key", alg: -7 }, // ES256 algorithm
-          { type: "public-key", alg: -257 } // RS256 algorithm (fallback)
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: "platform", // Use built-in authenticators only
-          userVerification: "required", // Require biometric verification
-          residentKey: "preferred" // Store credential on device if possible
-        },
-        timeout: 60000, // 60 seconds to complete registration
-        attestation: "none" // Don't request attestation for simplicity
+      let osId = userData?.osId
+      if (!osId) {
+        const loginContext = localStorage.getItem('telegram_login_temp')
+        const signupContext = localStorage.getItem('telegram_signup_temp')
+        
+        if (loginContext) {
+          try {
+            const parsed = JSON.parse(loginContext)
+            osId = parsed.osId
+          } catch (e) {
+            console.log('Could not parse login context for osId')
+          }
+        } else if (signupContext) {
+          try {
+            const parsed = JSON.parse(signupContext)
+            osId = parsed.osId
+          } catch (e) {
+            console.log('Could not parse signup context for osId')
+          }
+        }
       }
 
-      console.log('🔐 Calling WebAuthn credential creation...')
-      setSuccess(`${method === 'fingerprint' ? 'Touch the sensor' : 'Look at the camera'} now!`)
-      setRegistrationProgress(75)
+      console.log('👤 Using username for biometric auth:', username)
+      console.log('🏷️ Using OS-ID:', osId)
 
-      // Create the WebAuthn credential (this will prompt for biometric)
-      const credential = await navigator.credentials.create({ publicKey }) as PublicKeyCredential
+      const challengeResponse = await fetch('/api/auth/webauthn/get-challenge', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username,
+          'x-login-flow': 'true',
+          'x-pre-auth': btoa(JSON.stringify({
+            username: username,
+            timestamp: Date.now(),
+            purpose: 'biometric_login'
+          }))
+        },
+        body: JSON.stringify({ 
+          type: 'login', 
+          method,
+          username: username,
+          osId: osId
+        }),
+      })
 
-      if (!credential) {
-        throw new Error('Biometric registration was cancelled or failed')
+      if (!challengeResponse.ok) {
+        const errorData = await challengeResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to fetch authentication challenge.')
       }
 
-      console.log('✅ WebAuthn credential created successfully')
-      setRegistrationProgress(90)
+      const challengeData = await challengeResponse.json()
+      const { challenge, credentialId } = challengeData
 
-      // In a real implementation, you would send this to your server for storage
-      // For now, we'll just simulate a successful registration
-      const credentialData = {
-        id: credential.id,
-        rawId: bufferToBase64url(credential.rawId),
-        type: credential.type,
-        method: method,
+      if (!challenge) {
+        throw new Error('Invalid challenge data received from server.')
+      }
+
+      console.log('✅ Challenge received from server')
+
+      const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
+        challenge: base64urlToBuffer(challenge),
+        allowCredentials: credentialId ? [
+          {
+            id: base64urlToBuffer(credentialId),
+            type: 'public-key',
+            transports: method === 'touch' ? ['internal'] : ['internal', 'hybrid'],
+          }
+        ] : [],
+        timeout: 60000,
+        userVerification: 'required',
+      }
+
+      console.log('🔐 Calling WebAuthn for authentication...')
+
+      const assertion = await navigator.credentials.get({ 
+        publicKey: publicKeyCredentialRequestOptions 
+      }) as PublicKeyCredential
+
+      if (!assertion) {
+        throw new Error('Biometric authentication was cancelled or failed.')
+      }
+
+      console.log('✅ WebAuthn assertion received')
+
+      const loginData = {
         username: username,
-        osId: currentUserData?.osId
+        osId: osId,
+        loginMethod: 'biometric',
+        biometricMethod: method,
+        loginTime: new Date().toISOString()
       }
+      localStorage.setItem('onestep_login_data', JSON.stringify(loginData))
+      
+      setUserData({
+        username: username,
+        osId: osId,
+        isSetupComplete: true,
+        telegramUserId: 1694779369
+      })
 
-      console.log('💾 Credential data (would be sent to server):', credentialData)
-
-      // Simulate server registration (in production, send to /api/auth/webauthn/register)
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate network delay
-
-      // Mark registration as complete
-      setRegistrationProgress(100)
-      setCurrentStep('complete')
-      setSuccess(`🎉 ${method === 'fingerprint' ? 'Touch ID' : 'Face ID'} setup complete!`)
-
-      // Update the method as registered
-      setBiometricMethods(methods => 
-        methods.map(m => 
-          m.id === method ? { ...m, isRegistered: true } : m
-        )
-      )
+      setSuccess(`✅ ${method === 'touch' ? 'Touch ID' : 'Face ID'} authentication successful!`)
 
       console.log('✅ Biometric registration complete!')
 
@@ -459,14 +486,14 @@ export default function BiometricsSetupPage() {
   }
 
   // Function to test/verify a registered biometric method (enhanced from login.tsx)
-  const testBiometricAuth = async (method: 'fingerprint' | 'face') => {
+  const testBiometricAuth = async (method: 'touch' | 'face') => {
     console.log(`🧪 Testing ${method} authentication...`)
     setLoading(true)
     setError(null)
     setCurrentStep('verify')
 
     try {
-      setSuccess(`Testing your ${method === 'fingerprint' ? 'Touch ID' : 'Face ID'}...`)
+      setSuccess(`Testing your ${method === 'touch' ? 'Touch ID' : 'Face ID'}...`)
 
       // Check if we have registration data
       const registrationData = localStorage.getItem('onestep_biometric_data')
@@ -496,7 +523,7 @@ export default function BiometricsSetupPage() {
 
       if (assertion) {
         console.log('✅ Biometric test successful!')
-        setSuccess(`✅ ${method === 'fingerprint' ? 'Touch ID' : 'Face ID'} test successful!`)
+        setSuccess(`✅ ${method === 'touch' ? 'Touch ID' : 'Face ID'} test successful!`)
         setCurrentStep('complete')
         
         // Update localStorage with successful test
@@ -700,10 +727,10 @@ export default function BiometricsSetupPage() {
     <div className="text-center space-y-6">
       <div>
         <h2 className="text-3xl font-bold text-foreground-primary mb-2">
-          {selectedMethod === 'fingerprint' ? 'Setting up Touch ID' : 'Setting up Face ID'}
+          {selectedMethod === 'touch' ? 'Setting up Touch ID' : 'Setting up Face ID'}
         </h2>
         <p className="text-foreground-secondary">
-          Follow the prompts to register your {selectedMethod === 'fingerprint' ? 'fingerprint' : 'face'}
+          Follow the prompts to register your {selectedMethod === 'touch' ? 'touch' : 'face'}
         </p>
       </div>
 
@@ -715,7 +742,7 @@ export default function BiometricsSetupPage() {
             bg-accent-primary/20 border-4 border-accent-primary/30
             ${loading ? 'animate-pulse' : ''}
           `}>
-            {selectedMethod === 'fingerprint' ? (
+            {selectedMethod === 'touch' ? (
               <Fingerprint className="w-16 h-16 text-accent-primary" />
             ) : (
               <Scan className="w-16 h-16 text-accent-primary" />
@@ -788,24 +815,24 @@ export default function BiometricsSetupPage() {
           Biometric Setup Complete!
         </h2>
         <p className="text-foreground-secondary">
-          Your {selectedMethod === 'fingerprint' ? 'Touch ID' : 'Face ID'} has been successfully registered
+          Your {selectedMethod === 'touch' ? 'Touch ID' : 'Face ID'} has been successfully registered
         </p>
       </div>
 
       {/* Success summary */}
       <div className="p-4 bg-status-success/10 border border-status-success/20 rounded-xl">
         <div className="flex items-center justify-center space-x-2 mb-2">
-          {selectedMethod === 'fingerprint' ? (
+          {selectedMethod === 'touch' ? (
             <Fingerprint className="w-5 h-5 text-status-success" />
           ) : (
             <Scan className="w-5 h-5 text-status-success" />
           )}
           <span className="font-medium text-status-success">
-            {selectedMethod === 'fingerprint' ? 'Touch ID' : 'Face ID'} Active
+            {selectedMethod === 'touch' ? 'Touch ID' : 'Face ID'} Active
           </span>
         </div>
         <p className="text-sm text-foreground-tertiary">
-          You can now use your {selectedMethod === 'fingerprint' ? 'fingerprint' : 'face'} to quickly and securely log into your OneStep account.
+          You can now use your {selectedMethod === 'touch' ? 'touch' : 'face'} to quickly and securely log into your OneStep account.
         </p>
       </div>
 
@@ -818,7 +845,7 @@ export default function BiometricsSetupPage() {
           className="w-full"
         >
           <Eye className="w-4 h-4 mr-2" />
-          Test {selectedMethod === 'fingerprint' ? 'Touch ID' : 'Face ID'}
+          Test {selectedMethod === 'touch' ? 'Touch ID' : 'Face ID'}
         </Button>
 
         <Button
